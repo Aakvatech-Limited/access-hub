@@ -82,8 +82,7 @@ app_license = "mit"
 # Installation
 # ------------
 
-# before_install = "access_hub.install.before_install"
-# after_install = "access_hub.install.after_install"
+after_install = "access_hub.access_hub.doctype.remote_access_settings.remote_access_settings.after_install"
 
 # Uninstallation
 # ------------
@@ -226,13 +225,6 @@ app_license = "mit"
 # 	{
 # 		"doctype": "{doctype_4}"
 # 	}
-# ]
-
-# Authentication and authorization
-# --------------------------------
-
-# auth_hooks = [
-# 	"access_hub.auth.validate"
 # ]
 
 # Automatically update python controller files with type annotations for this app.

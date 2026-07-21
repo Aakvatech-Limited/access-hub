@@ -1,0 +1,94 @@
+{
+ "actions": [],
+ "creation": "2026-01-01 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "document_type",
+  "mode",
+  "action_create",
+  "action_write",
+  "action_delete",
+  "action_submit",
+  "action_cancel",
+  "action_read"
+ ],
+ "fields": [
+  {
+   "fieldname": "document_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Document Type",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "default": "deny",
+   "fieldname": "mode",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Mode",
+   "options": "deny\nwarn",
+   "reqd": 1
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "action_create",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Create"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "action_write",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Write"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "action_delete",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Delete"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "action_submit",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Submit"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "action_cancel",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Cancel"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "action_read",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Read"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-01-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Access Hub",
+ "name": "Access Policy Rule",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

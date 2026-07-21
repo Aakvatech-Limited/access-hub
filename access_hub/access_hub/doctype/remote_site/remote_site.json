@@ -1,0 +1,101 @@
+{
+ "actions": [],
+ "autoname": "field:host",
+ "creation": "2026-01-01 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "host",
+  "port",
+  "protocol",
+  "enrollment_type",
+  "transport_token",
+  "transport_token_hash",
+  "app_version",
+  "last_announced_on"
+ ],
+ "fields": [
+  {
+   "fieldname": "host",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Host",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "443",
+   "fieldname": "port",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Port",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "default": "https",
+   "fieldname": "protocol",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Protocol",
+   "options": "https\nhttp",
+   "reqd": 1
+  },
+  {
+   "default": "manual",
+   "fieldname": "enrollment_type",
+   "fieldtype": "Select",
+   "label": "Enrollment Type",
+   "options": "manual\nfc",
+   "reqd": 1
+  },
+  {
+   "description": "Shown once at creation/regeneration. Not stored after hashing.",
+   "fieldname": "transport_token",
+   "fieldtype": "Data",
+   "label": "Transport Token"
+  },
+  {
+   "fieldname": "transport_token_hash",
+   "fieldtype": "Data",
+   "label": "Transport Token Hash",
+   "read_only": 1
+  },
+  {
+   "fieldname": "app_version",
+   "fieldtype": "Data",
+   "label": "Guard App Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_announced_on",
+   "fieldtype": "Datetime",
+   "label": "Last Announced On",
+   "read_only": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-01-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Access Hub",
+ "name": "Remote Site",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

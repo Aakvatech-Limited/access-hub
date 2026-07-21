@@ -1,0 +1,115 @@
+{
+ "actions": [],
+ "creation": "2026-01-01 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "rules",
+  "session_expiry_seconds",
+  "always_log_doctypes",
+  "max_key_size_bytes",
+  "log_reads",
+  "monitoring_notice_text",
+  "sync_enabled",
+  "retention_days",
+  "push_grace_days",
+  "current_policy_token"
+ ],
+ "fields": [
+  {
+   "fieldname": "rules",
+   "fieldtype": "Table",
+   "label": "Deny / Warn Rules",
+   "options": "Access Policy Rule"
+  },
+  {
+   "default": "21600",
+   "description": "Effective session length is min(this, the client site's own System Settings session_expiry). Default 6h.",
+   "fieldname": "session_expiry_seconds",
+   "fieldtype": "Int",
+   "label": "Session Expiry (seconds)",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "default": "User\nServer Script",
+   "description": "One doctype per line. Writes to these are always logged in full (after_commit), regardless of the deny/warn rules above.",
+   "fieldname": "always_log_doctypes",
+   "fieldtype": "Small Text",
+   "label": "Always-Log Doctypes"
+  },
+  {
+   "default": "524288",
+   "fieldname": "max_key_size_bytes",
+   "fieldtype": "Int",
+   "label": "Max Logged Arg Size (bytes)",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "When off, pure-read whitelisted calls (see protocol.READ_SKIP_METHODS) are not logged.",
+   "fieldname": "log_reads",
+   "fieldtype": "Check",
+   "label": "Log Reads"
+  },
+  {
+   "default": "Your activity on this site is being recorded for audit.",
+   "fieldname": "monitoring_notice_text",
+   "fieldtype": "Small Text",
+   "label": "Monitoring Notice Text"
+  },
+  {
+   "default": "1",
+   "description": "Best-effort push of this policy to reachable guards on save; guards also pull hourly regardless.",
+   "fieldname": "sync_enabled",
+   "fieldtype": "Check",
+   "label": "Sync Enabled"
+  },
+  {
+   "default": "365",
+   "fieldname": "retention_days",
+   "fieldtype": "Int",
+   "label": "Retention (days)",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "default": "7",
+   "description": "A session's local log file is deleted once (acked by hub AND local age > this) OR age > retention_days.",
+   "fieldname": "push_grace_days",
+   "fieldtype": "Int",
+   "label": "Push Grace (days)",
+   "non_negative": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "current_policy_token",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Current Policy Token",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-01-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Access Hub",
+ "name": "Remote Access Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}
