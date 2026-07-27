@@ -161,10 +161,10 @@ class TestPolicyToken(HubTestCase):
 		settings = frappe.get_single("Access Hub Settings")
 		if not settings.rules:
 			from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
-				after_install,
+				seed_default_policy,
 			)
 
-			after_install()
+			seed_default_policy()
 			settings = frappe.get_single("Access Hub Settings")
 
 		token = get_current_policy_token()

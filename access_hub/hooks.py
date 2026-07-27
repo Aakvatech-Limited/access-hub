@@ -7,5 +7,5 @@ app_license = "mit"
 
 require_type_annotated_api_methods = True
 
-after_install = "access_hub.access_hub.doctype.access_hub_settings.access_hub_settings.after_install"
+after_install = "access_hub.setup.after_install"
 after_migrate = "access_hub.setup.after_migrate"

@@ -36,14 +36,27 @@ async function setupForm({ doc, call }) {
 """.strip()
 
 
+def after_install():
+	"""Make the hub usable out of the box (idempotent): generate the signing
+	keypair, seed default policy, then run the migrate-time app setup."""
+	from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
+		seed_default_policy,
+	)
+	from access_hub.utils.crypto import ensure_keypair
+
+	ensure_keypair()
+	seed_default_policy()
+	after_migrate()
+
+
 def after_migrate():
-	"""Runs on every migrate (and invoked from after_install). Idempotent."""
+	"""Runs on every migrate (and from after_install). Idempotent."""
 	_sync_helpdesk_customer_field()
 	_sync_helpdesk_ticket_form_script()
 
 
 def _helpdesk_ready() -> bool:
-	return "helpdesk" in frappe.get_installed_apps() and frappe.db.exists("DocType", "HD Customer")
+	return "helpdesk" in frappe.get_installed_apps()
 
 
 def _sync_helpdesk_customer_field():

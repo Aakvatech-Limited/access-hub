@@ -116,16 +116,10 @@ def push_policy_to_all_sites(token: str):
 			frappe.logger("access_hub").info(f"policy push to {site.name} failed (best-effort, ignored)")
 
 
-def after_install():
-	"""Make the hub usable out of the box: generate the signing keypair if
-	absent, and seed the Access Hub Settings Single with the protocol's default
-	deny rule. Both steps are idempotent."""
-	from access_hub.setup import after_migrate as run_app_setup
-	from access_hub.utils.crypto import ensure_keypair
-
-	ensure_keypair()
-	run_app_setup()  # helpdesk-conditional custom field etc.
-
+def seed_default_policy():
+	"""Seed the Access Hub Settings Single with the protocol's default scalar
+	values and deny rule, if it has no rules yet. Idempotent. Orchestrated from
+	access_hub.setup on install."""
 	settings = frappe.get_single("Access Hub Settings")
 	if settings.rules:
 		return

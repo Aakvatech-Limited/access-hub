@@ -31,8 +31,8 @@ class RemoteSite(Document):
 	def enrollment_config(self, plaintext_token: str | None = None) -> dict:
 		"""The guard-side config an operator copies to enroll this site: hub URL,
 		public key, and the one-time transport token (present only when freshly
-		generated/rotated). after_install generates the keypair, so a missing key
-		is unexpected — surface it clearly rather than shipping half a config."""
+		generated/rotated). Install generates the keypair, so a missing key is
+		unexpected — surface it clearly rather than shipping half a config."""
 		public_key = frappe.conf.get(CONF_HUB_PUBLIC_KEY_LOCAL)
 		if not public_key:
 			frappe.throw("No hub keypair found. Run `bench access-hub-generate-keypair` first.")
