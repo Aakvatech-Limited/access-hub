@@ -464,29 +464,17 @@ class TestIngestEndpointsOverRealHttp(HubTestCase):
 		self.assertEqual(resp.status_code, 426)
 
 
-class TestEnrollmentInfoPermission(HubTestCase):
-	def setUp(self):
-		self.addCleanup(frappe.set_user, "Administrator")
+class TestEnrollmentConfig(HubTestCase):
+	def test_get_enrollment_config_shape(self):
+		from access_hub.protocol import (
+			GUARD_CONF_HUB_PUBLIC_KEY,
+			GUARD_CONF_HUB_URL,
+			GUARD_CONF_TRANSPORT_TOKEN,
+		)
 
-	def test_system_manager_can_fetch(self):
-		from access_hub.api import get_hub_enrollment_info
-
-		frappe.set_user("Administrator")
-		result = get_hub_enrollment_info()
-		self.assertIn("access_guard_hub_url", result)
-		self.assertIn("access_guard_hub_public_key", result)
-
-	def test_non_system_manager_is_denied(self):
-		from access_hub.api import get_hub_enrollment_info
-
-		email = f"no-access-enroll-{self._testMethodName}@example.com"
-		self.make_user(email, last_name="Access")
-
-		frappe.set_user(email)
-		original_in_test = frappe.flags.in_test
-		frappe.flags.in_test = False
-		try:
-			with self.assertRaises(frappe.PermissionError):
-				get_hub_enrollment_info()
-		finally:
-			frappe.flags.in_test = original_in_test
+		site = self.make_remote_site("test-enrollcfg.localhost")
+		config = site.get_enrollment_config("plaintext-token-123")
+		# keyed by the protocol-defined guard config keys, not literals
+		self.assertIn(GUARD_CONF_HUB_URL, config)
+		self.assertIn(GUARD_CONF_HUB_PUBLIC_KEY, config)
+		self.assertEqual(config[GUARD_CONF_TRANSPORT_TOKEN], "plaintext-token-123")

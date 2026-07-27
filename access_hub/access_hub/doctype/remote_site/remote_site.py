@@ -7,7 +7,12 @@ import frappe
 from frappe.model.document import Document
 
 from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL, TRANSPORT_TOKEN_MIN_LEN
-from access_hub.protocol import transport_token_hash
+from access_hub.protocol import (
+	GUARD_CONF_HUB_PUBLIC_KEY,
+	GUARD_CONF_HUB_URL,
+	GUARD_CONF_TRANSPORT_TOKEN,
+	transport_token_hash,
+)
 
 
 class RemoteSite(Document):
@@ -26,9 +31,9 @@ class RemoteSite(Document):
 			frappe.throw(f"Transport Token must be at least {TRANSPORT_TOKEN_MIN_LEN} characters long.")
 		self.transport_token_hash = transport_token_hash(plaintext)
 		if onload:
-			self.set_onload("transport_token_config", self.enrollment_config(plaintext))
+			self.set_onload("transport_token_config", self.get_enrollment_config(plaintext))
 
-	def enrollment_config(self, plaintext_token: str | None = None) -> dict:
+	def get_enrollment_config(self, plaintext_token: str | None = None) -> dict:
 		"""The guard-side config an operator copies to enroll this site: hub URL,
 		public key, and the one-time transport token (present only when freshly
 		generated/rotated). Install generates the keypair, so a missing key is
@@ -37,9 +42,9 @@ class RemoteSite(Document):
 		if not public_key:
 			frappe.throw("No hub keypair found. Run `bench access-hub-generate-keypair` first.")
 		return {
-			"access_guard_hub_url": frappe.utils.get_url(),
-			"access_guard_hub_public_key": public_key,
-			"access_guard_transport_token": plaintext_token,
+			GUARD_CONF_HUB_URL: frappe.utils.get_url(),
+			GUARD_CONF_HUB_PUBLIC_KEY: public_key,
+			GUARD_CONF_TRANSPORT_TOKEN: plaintext_token,
 		}
 
 
@@ -53,7 +58,7 @@ def rotate_transport_token(remote_site: str, token: str | None = None) -> dict:
 	plaintext = (token or "").strip() or secrets.token_urlsafe(32)
 	doc._apply_token(plaintext)
 	doc.save()
-	return doc.enrollment_config(plaintext)
+	return doc.get_enrollment_config(plaintext)
 
 
 def announce(

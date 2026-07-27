@@ -3,10 +3,11 @@
 
 frappe.ui.form.on("Access Hub Settings", {
 	refresh(frm) {
-		frappe.call({
-			method: "access_hub.api.get_hub_enrollment_info",
-			callback: (r) => r.message && render_enrollment_info(frm, r.message),
-		});
+		// Enrollment values are pushed via the controller's onload — no API call.
+		const info = frm.doc.__onload && frm.doc.__onload.hub_enrollment_info;
+		if (info) {
+			render_enrollment_info(frm, info);
+		}
 	},
 });
 
@@ -14,10 +15,9 @@ frappe.ui.form.on("Access Hub Settings", {
 // rows in the always-visible HTML field; the per-site transport token is set
 // on each Remote Site, not here.
 function render_enrollment_info(frm, info) {
-	const rows = [
-		["access_guard_hub_url", info.access_guard_hub_url],
-		["access_guard_hub_public_key", info.access_guard_hub_public_key],
-	];
+	// Keys come from the onload payload (protocol-defined server-side) — the JS
+	// hardcodes none of them.
+	const rows = Object.entries(info);
 	let html = "";
 	rows.forEach(([key, value], i) => {
 		html += `

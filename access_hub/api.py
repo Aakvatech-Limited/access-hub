@@ -6,7 +6,6 @@ from urllib.parse import quote
 
 import frappe
 
-from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL
 from access_hub.protocol import (
 	TRANSPORT_TOKEN_HEADER,
 	AccessProtocolError,
@@ -14,28 +13,6 @@ from access_hub.protocol import (
 	check_pv,
 	transport_token_hash,
 )
-
-
-@frappe.whitelist()
-def get_hub_enrollment_info():
-	"""Return the hub-wide enrollment values shared by every client: the hub URL
-	and public key. These are identical across all Remote Sites, so they live in
-	Access Hub Settings rather than per-site. The per-site transport token is
-	shown only at creation/rotation, via the Remote Site dialog.
-
-	Gated on Access Hub Settings "read" (System Manager) since it returns the
-	hub's public key.
-	"""
-	frappe.has_permission("Access Hub Settings", "read", throw=True)
-
-	public_key = frappe.conf.get(CONF_HUB_PUBLIC_KEY_LOCAL)
-	if not public_key:
-		frappe.throw("No hub keypair found. Run `bench access-hub-generate-keypair` first.")
-
-	return {
-		"access_guard_hub_url": frappe.utils.get_url(),
-		"access_guard_hub_public_key": public_key,
-	}
 
 
 @frappe.whitelist()

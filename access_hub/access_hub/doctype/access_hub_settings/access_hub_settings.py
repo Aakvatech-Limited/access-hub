@@ -4,7 +4,10 @@
 import frappe
 from frappe.model.document import Document
 
+from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL
 from access_hub.protocol import (
+	GUARD_CONF_HUB_PUBLIC_KEY,
+	GUARD_CONF_HUB_URL,
 	POLICY_ALWAYS_LOG_DOCTYPES,
 	POLICY_DEFAULTS,
 	POLICY_LOG_READS,
@@ -22,6 +25,20 @@ from access_hub.utils.crypto import sign_paseto
 
 
 class AccessHubSettings(Document):
+	def onload(self):
+		# Push the hub-wide enrollment values (same for every client) onto the
+		# form via onload — no extra API round-trip. Keypair-tolerant: absent
+		# before the first keygen, the field just shows nothing.
+		public_key = frappe.conf.get(CONF_HUB_PUBLIC_KEY_LOCAL)
+		if public_key:
+			self.set_onload(
+				"hub_enrollment_info",
+				{
+					GUARD_CONF_HUB_URL: frappe.utils.get_url(),
+					GUARD_CONF_HUB_PUBLIC_KEY: public_key,
+				},
+			)
+
 	def validate(self):
 		self._validate_rules()
 
