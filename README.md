@@ -3,9 +3,13 @@
 Central issuer for ephemeral Frappe site access.
 
 Pairs with [Access Guard](https://github.com/Aakvatech-Limited/access-guard), the client-side
-enforcement and logging app installed on each site being granted access. See
-[`docs/DESIGN.md`](docs/DESIGN.md) and [`docs/PROTOCOL.md`](docs/PROTOCOL.md) for the shared
-design and wire protocol (this repo is authoritative for both).
+enforcement and logging app installed on each site being granted access.
+
+Docs (this repo is authoritative for the shared set):
+- [`docs/CONTEXT.md`](docs/CONTEXT.md) — the problem being solved.
+- [`docs/DESIGN.md`](docs/DESIGN.md) — architecture and rationale.
+- [`docs/PROTOCOL.md`](docs/PROTOCOL.md) — the frozen wire contract.
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md) — install, enroll, use, test.
 
 ### Installation
 
@@ -16,6 +20,9 @@ cd $PATH_TO_YOUR_BENCH
 bench get-app https://github.com/Aakvatech-Limited/access-hub --branch develop
 bench install-app access_hub
 ```
+
+Install auto-generates the signing keypair and seeds the default policy — see
+[`docs/OPERATIONS.md`](docs/OPERATIONS.md) to enroll a client and start granting access.
 
 ### Contributing
 

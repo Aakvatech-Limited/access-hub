@@ -30,12 +30,18 @@ signed artifact and a field in every JSON payload; a mismatch → `ProtocolVersi
 - `access_guard_transport_token` — per-client bearer, **min length 8**.
 
 **Hub site:**
-- `access_hub_private_key` — PASETO secret (`k4.secret...`), generated once by a bench command.
-- `access_hub_public_key` — the matching `k4.public...`, persisted on the hub itself (not just
-  printed once at keygen). This is what backs the hub's own enrollment-help surface (a bench
-  command + a Remote Site desk action) that hands a client admin the `access_guard_hub_url` +
-  `access_guard_hub_public_key` + `access_guard_transport_token` they need to enroll — without
-  ever reading `site_config.json` by hand.
+- `access_hub_private_key` — PASETO secret (`k4.secret...`), auto-generated on install (or via the
+  `bench access-hub-generate-keypair` command).
+- `access_hub_public_key` — the matching `k4.public...`, persisted on the hub itself. This backs the
+  hub's enrollment-help surface, which hands a client admin the three guard values above without
+  anyone reading `site_config.json` by hand:
+  - **Hub-wide values** (`access_guard_hub_url` + `access_guard_hub_public_key`, identical for
+    every client) are surfaced by `get_hub_enrollment_info` as an always-visible copyable field on
+    **Access Hub Settings**.
+  - The **per-site `access_guard_transport_token`** is shown **once**, at creation or rotation,
+    via a dialog on the **Remote Site** form (button **"Update Token"** → `rotate_transport_token`).
+    It is never stored plaintext — only `transport_token_hash` lives on the Remote Site. There is
+    no per-site `get_enrollment_info`.
 
 ## 2. `aud` / transport-token binding
 
@@ -69,8 +75,13 @@ PASETO `v4.public`, signed with the hub private key. Claims:
 4. `exp` (allow `CLOCK_SKEW_LEEWAY_SECONDS`) → `TokenExpiredError`
 5. `aud == transport_token_hash(local token)` → `TokenAudienceError`
 6. `jti` not in used set → `TokenReplayError`; then mark used.
+7. resolve ephemeral user for `emp_email`: create if absent, or reuse **only** if the email already
+   belongs to an ephemeral user. If it belongs to a **standing (non-ephemeral)** existing user →
+   `EphemeralUserCollisionError`, no session started. Ephemeral membership is grant-file-derived
+   (`ephemeral_users()` = every `user` named in a grant file), never a DB flag.
 
-On success: write grant file, create/reuse ephemeral user, start session, redirect to `/app`.
+On success: write grant file, create/reuse ephemeral user, start session, redirect to
+`get_default_path()` (the configured default app for the logged-in user) or `/app`.
 
 ## 4. Policy token (hub → guard)
 
@@ -106,6 +117,7 @@ Policy object keys (defaults live in `protocol.py::POLICY_DEFAULTS`):
 runs at all, forcing an unnecessary global `auth_hooks` registration; a custom header sidesteps that
 gate entirely, so `ingest_endpoint` is the only place this token is ever checked).
 Hub computes `transport_token_hash(received)` and matches a Remote Site → else `TransportAuthError`.
+The matched Remote Site (not any payload field) is what identifies the client to each endpoint.
 
 | method | payload | returns |
 |---|---|---|
@@ -117,7 +129,7 @@ Hub computes `transport_token_hash(received)` and matches a Remote Site → else
 ### Guard
 | method | auth | payload | returns |
 |---|---|---|---|
-| `access_guard.api.accept` (allow_guest) | the grant token | `?token=<paseto>` | 302 → `/app` |
+| `access_guard.api.accept` (allow_guest) | the grant token | `?token=<paseto>` | 302 → default app path (`get_default_path()` or `/app`) |
 | `access_guard.api.receive_policy` (allow_guest) | the policy token itself | `{ policy_token }` | `{ ok }` |
 
 All error responses use `AccessProtocolError.as_response()` →
@@ -132,30 +144,51 @@ Authoritative for the reaper, the session guard, and provisioning reports. Never
   "jti": "...", "pv": 1,
   "emp_name": "...", "emp_email": "...",
   "user": "john.doe@example.com",     // ephemeral user id (== emp_email in v1)
-  "sid": "...",                        // recorded at login → maps session to jti
+  "sid": "...",                        // null at write, set at login → maps session to jti
   "issued_at": "iso",
-  "effective_expiry_seconds": 21600    // min(policy.session_expiry, site session_expiry) at accept
+  "effective_expiry_seconds": 21600    // policy.session_expiry_seconds at accept; the reaper
+                                       // idles out at min(this, site System Settings expiry)
 }
 ```
 
 "Is this session ephemeral?" → `frappe.session.sid` appears as a `sid` in some grant file.
-"Which users may the reaper touch?" → only `user` values present in grant files (namespace filter).
+"Which users may the reaper touch?" → only `user` values present in grant files (namespace filter,
+`ephemeral_users()`).
 
 ## 7. Log line schema (`site/private/access_guard/logs/<jti>.jsonl`)
 
 One file per session (jti). Append-only, plain open-append-close per request.
 
 ```json
-{"ts":"iso","jti":"...","sid":"...","type":"request","method":"...","status":"ok|error","args":<truncated to max_key_size>}
+{"ts":"iso","jti":"...","sid":"...","type":"request","method":"...","http_method":"POST","status":"ok|error","args":<truncated to max_key_size>}
 {"ts":"iso","jti":"...","sid":"...","type":"doc","doctype":"User","name":"...","action":"write","diff":{...}}   // after_commit, size-exempt
 {"ts":"iso","jti":"...","sid":"...","type":"session","event":"accepted|login|logout","reason":"..."}
 ```
 
-Request logging: log **every** whitelisted call except, when `log_reads` is false, methods in
-`READ_SKIP_METHODS`. No write-list; no reliance on `transaction_writes`.
+Request logging keys the skip decision off the **HTTP verb**, not the endpoint name: **safe verbs**
+(GET/HEAD/OPTIONS, from `frappe.auth.SAFE_HTTP_METHODS`) are skipped unless `log_reads` is on;
+**unsafe verbs are always logged**. Rationale: a user's mutating action always arrives via an
+unsafe verb, so this is a version-proof signal needing no per-endpoint denylist and no reliance on
+`transaction_writes`; sensitive-doctype writes are still caught verb-independently by the always-log
+doc channel (`always_log_doctypes`). The endpoint name is recorded in `method`, the verb in
+`http_method`, for context.
 
 ## 8. Version / errors
 
 `pv = 1`. Error codes + HTTP statuses are defined once in `protocol.py` as the `AccessProtocolError`
 subclass hierarchy. v1 supports exactly `pv=1`; anything else is `ProtocolVersionError`, not a
 degraded parse.
+
+| class | `code` | HTTP |
+|---|---|---|
+| `AccessProtocolError` (base) | `access_protocol_error` | 400 |
+| `ClientNotConfiguredError` | `client_not_configured` | 503 |
+| `TokenMalformedError` | `token_malformed` | 400 |
+| `TokenSignatureError` | `token_bad_signature` | 401 |
+| `TokenExpiredError` | `token_expired` | 401 |
+| `TokenAudienceError` | `token_wrong_audience` | 403 |
+| `TokenReplayError` | `token_replayed` | 409 |
+| `ProtocolVersionError` | `protocol_version_mismatch` | 426 |
+| `TransportAuthError` | `transport_auth_failed` | 401 |
+| `PolicyDeniedError` | `policy_denied` | 403 |
+| `EphemeralUserCollisionError` | `ephemeral_user_collision` | 409 |

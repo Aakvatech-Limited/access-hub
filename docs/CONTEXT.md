@@ -1,39 +1,41 @@
 # Project context
 
-## User story
+The problem this system solves, in the words of the consultancy that needs it.
+For how it's built, see [DESIGN.md](DESIGN.md); for the wire contract,
+[PROTOCOL.md](PROTOCOL.md); to run/operate it, [OPERATIONS.md](OPERATIONS.md).
 
-## Problem Statement
+## Problem statement
 
-I run an ERPNext implementation / consultancy company. I have hundreds of end-user clients who use ERPNext for their business ops. I have tens of employees who work on these implementations and support these clients.
+We run an ERPNext implementation / consultancy company with hundreds of end-user
+clients and tens of employees who implement and support those clients.
 
-The way we operate right now is that each employee has their user account on client sites. This user needs to be System Manager because many of the tasks they perform require elevated permissions.
+Today each employee has a user account **on every client site**, and it must be
+**System Manager** because much of the work needs elevated permissions.
 
-Recently, despite having signed NDAs, we have had a few incidents where employees have misused their elevated permissions on client sites. This has led to data breaches and loss of trust with our clients.
+Despite signed NDAs, a few employees have misused those permissions — causing data
+breaches and lost client trust. Standing elevated access is the root cause.
 
-More context: I have a central helpdesk site where clients and employees can interact over tickets.
+We also run a central **helpdesk site** where clients and employees interact over
+tickets.
 
-## Proposed Solution
+## Proposed solution
 
-I think there are two parts to what I'm thinking:
+**1. Ephemeral access.** An employee requests access from the helpdesk and gets a
+short-lived account on the client site; when the work is done the account is
+deleted automatically. Access exists only during the window it's needed.
 
-1. Ephemeral access
+**2. Logging.** Every action an employee performs on a client site is logged for
+audit — who accessed which site, what they did, when. Logs **cannot** live in the
+client-site DB (an employee could delete them), so they are written to **files**
+on the client site and synced periodically to the helpdesk for monitoring.
 
-Employee clicks a button on the helpdesk site - gets access (with/without approval - optional). Once his job is done, the User on client's site is deleted automatically. This way, employees only have access when they need it and cannot misuse their permissions outside of that window.
+## Hard constraint
 
-2. Logging
+No per-client base user with a copied API key-pair. A long-lived api_key/api_secret
+stored per client on the helpdesk would itself be the standing, copyable,
+breach-amplifying credential we're trying to remove. The design provisions access
+**without** any shared secret per client — one helpdesk private key, clients hold
+only the matching public key.
 
-All actions performed by employees on client sites should be logged and monitored. This includes tracking which employee accessed which client site, what actions they performed, and when. This will help in auditing and identifying any misuse of permissions.
-
-Logging cannot happen on the client site database because employees can delete logs. So, the logging should happen in files on the client site. These may be synced periodically to the central helpdesk site for monitoring and auditing purposes.
-
-We do not give SSH access to client site, so logging can be done in a file in the site's dir.
-
-## Questions
-
-- what's a clean software design to provision this ephemeral access? ideally, without having to create a base user on each client site and copy the api key-pair to the helpdesk site.
-
-i will install a separate frappe app on both sites (helpdesk and client).
-## FC automation scope
-
-# fc-automation-scope
-
+Two Frappe apps implement this: **access-hub** on the helpdesk, **access-guard** on
+each client site.
