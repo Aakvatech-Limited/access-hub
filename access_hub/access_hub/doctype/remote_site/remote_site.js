@@ -67,7 +67,7 @@ frappe.ui.form.on("Remote Site", {
 });
 
 // The one dialog every generation/rotation path funnels into. A read-only Code
-// field renders the config as copyable JSON with Frappe's built-in copy button.
+// field renders the config as JSON, with a Copy config primary action.
 function show_config_dialog(frm, config) {
 	const blob = {
 		access_guard_hub_url: config.access_guard_hub_url,
@@ -76,9 +76,11 @@ function show_config_dialog(frm, config) {
 	if (config.access_guard_transport_token) {
 		blob.access_guard_transport_token = config.access_guard_transport_token;
 	}
+	const json = JSON.stringify(blob, null, 2);
 
 	const d = new frappe.ui.Dialog({
 		title: __("Enrollment config for {0}", [frm.doc.host]),
+		size: "large",
 		fields: [
 			{
 				fieldname: "config",
@@ -86,7 +88,7 @@ function show_config_dialog(frm, config) {
 				label: __("access-guard site config"),
 				options: "JSON",
 				read_only: 1,
-				default: JSON.stringify(blob, null, 2),
+				default: json,
 			},
 			{
 				fieldname: "note",
@@ -96,6 +98,10 @@ function show_config_dialog(frm, config) {
 				)}</p>`,
 			},
 		],
+		primary_action_label: __("Copy config"),
+		primary_action() {
+			frappe.utils.copy_to_clipboard(json);
+		},
 	});
 	d.show();
 }
