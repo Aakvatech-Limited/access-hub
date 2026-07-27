@@ -99,15 +99,20 @@ Policy object keys (defaults live in `protocol.py::POLICY_DEFAULTS`):
   "always_log_doctypes": ["User", "Server Script"],
   "max_key_size_bytes": 524288,
   "log_reads": false,
-  "sync_enabled": true,
+  "log_sync_enabled": true,
   "retention_days": 365,
   "push_grace_days": 7,
-  "name_suffix": "consultant"
+  "name_suffix": "consultant",
+  "access_disabled": false,
+  "blacklisted_emails": []
 }
 ```
 
-`mode ∈ {deny, warn}`; `actions ⊂ {create,write,delete,submit,cancel,read}`.
-**Delivery:** best-effort push on save + guaranteed hourly pull (see endpoints).
+`mode ∈ {deny, warn}`; `actions ⊂ {create,write,delete,submit,cancel}`.
+**Delivery:** policy push on save + policy pull on the guard's hourly check-in are both
+unconditional (not configurable in v1), so `access_disabled`/`blacklisted_emails` always reach a
+client quickly. `log_sync_enabled` only gates the rest of that hourly check-in (log push, announce,
+retention).
 
 ## 5. Endpoints
 

@@ -11,4 +11,9 @@ CONF_HUB_PUBLIC_KEY_LOCAL = "access_hub_public_key"  # paserk k4.public — hub'
 # aud = transport_token_hash(client transport token); exp = iat + GRANT_TTL.
 GRANT_TTL_SECONDS_DEFAULT = 45 * 60  # 30-60 min band; URL redemption deadline, NOT session length
 
+# --- Policy token minting -----------------------------------------------------
+# Rebuilt + re-signed on every Access Hub Settings save and pulled hourly by
+# every guard, so this only bites an already-unreachable guard.
+POLICY_TOKEN_TTL_DAYS = 30
+
 TRANSPORT_TOKEN_MIN_LEN = 8

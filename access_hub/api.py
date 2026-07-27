@@ -41,6 +41,10 @@ def request_access(remote_site: str):
 	if employee in ("Administrator", "Guest"):
 		frappe.throw("Please request access as a named user, not Administrator/Guest.")
 
+	settings = frappe.get_single("Access Hub Settings")
+	if settings.is_blacklisted(employee):
+		frappe.throw("Access is currently disabled for this account.")
+
 	_grant, token = create_and_mint(employee, remote_site)
 	return {"redirect_url": build_accept_url(remote_site, token)}
 

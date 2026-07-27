@@ -51,6 +51,9 @@ def after_install():
 
 def after_migrate():
 	"""Runs on every migrate (and from after_install). Idempotent."""
+	if not _helpdesk_ready():
+		return
+
 	_sync_helpdesk_customer_field()
 	_sync_helpdesk_ticket_form_script()
 
@@ -63,8 +66,6 @@ def _sync_helpdesk_customer_field():
 	"""When Frappe Helpdesk is on the site, link a Remote Site to its HD
 	Customer. System-generated custom field, optional — a hub-only convenience
 	that ties a client site to its helpdesk customer record."""
-	if not _helpdesk_ready():
-		return
 	if frappe.db.exists("Custom Field", "Remote Site-customer"):
 		return
 
@@ -84,7 +85,7 @@ def _sync_helpdesk_customer_field():
 def _sync_helpdesk_ticket_form_script():
 	"""Add/refresh the HD Form Script that renders the ticket's Access Sites
 	button. Upserts so the script stays current across upgrades."""
-	if not _helpdesk_ready() or not frappe.db.exists("DocType", "HD Form Script"):
+	if not frappe.db.exists("DocType", "HD Form Script"):
 		return
 
 	values = {
@@ -96,7 +97,7 @@ def _sync_helpdesk_ticket_form_script():
 	if frappe.db.exists("HD Form Script", HD_FORM_SCRIPT_NAME):
 		doc = frappe.get_doc("HD Form Script", HD_FORM_SCRIPT_NAME)
 		doc.update(values)
-		doc.save(ignore_permissions=True)
 	else:
 		doc = frappe.get_doc({"doctype": "HD Form Script", "__newname": HD_FORM_SCRIPT_NAME, **values})
-		doc.insert(ignore_permissions=True)
+
+	doc.save(ignore_permissions=True)

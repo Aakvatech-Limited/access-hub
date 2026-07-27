@@ -223,7 +223,7 @@ uncaught. The guard **denies** the meta-ops instead.
 - Wire/file: a normalized, versioned JSON rule list, decoupled from the UI. A
   single `mode` field (`deny` / `warn`, extensible later to `require-approval`
   etc.) keeps the schema stable; actions use Frappe's canonical names
-  (`create/write/delete/submit/cancel/read`). Exact policy-token format is in
+  (`create/write/delete/submit/cancel`). Exact policy-token format is in
   [PROTOCOL.md §4](PROTOCOL.md).
 - **Default seed:** `User → deny [create, write, delete]`, seeded via an
   idempotent install step (guard-on-existence-before-insert).

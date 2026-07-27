@@ -183,6 +183,52 @@ class TestPolicyToken(HubTestCase):
 			)
 		)
 
+	def test_blacklisted_users_and_access_disabled_round_trip_into_policy_dict(self):
+		from access_hub.protocol import POLICY_ACCESS_DISABLED, POLICY_BLACKLISTED_EMAILS
+
+		settings = frappe.get_single("Access Hub Settings")
+		if not settings.rules:
+			from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
+				seed_default_policy,
+			)
+
+			seed_default_policy()
+			settings = frappe.get_single("Access Hub Settings")
+		orig_disabled = settings.access_disabled
+		orig_blacklist = [row.user for row in settings.blacklisted_users]
+
+		def restore():
+			# Runs after make_user's own cleanup (LIFO) has already deleted the
+			# test user, so drop any blacklist row whose User no longer exists
+			# rather than re-adding a now-dangling Link. Commit explicitly:
+			# make_user's own cleanup already forced a commit, taking this
+			# Single's state outside the class-level rollback's reach, so this
+			# restore must also commit or a leftover row survives to the next run.
+			s = frappe.get_single("Access Hub Settings")
+			s.access_disabled = orig_disabled
+			s.set("blacklisted_users", [{"user": u} for u in orig_blacklist if frappe.db.exists("User", u)])
+			s.save(ignore_permissions=True)
+			frappe.db.commit()
+
+		self.addCleanup(restore)
+
+		user = self.make_user(f"policy-dict-{self._testMethodName}@example.com", first_name="Policy")
+		settings.access_disabled = 1
+		settings.append("blacklisted_users", {"user": user.name})
+		settings.save(ignore_permissions=True)
+
+		policy = settings.as_policy_dict()
+		self.assertTrue(policy[POLICY_ACCESS_DISABLED])
+		self.assertIn(user.name, policy[POLICY_BLACKLISTED_EMAILS])
+		self.assertTrue(settings.is_blacklisted(user.name))
+
+		# access_disabled alone (no blacklist) blocks everyone; isolate the
+		# blacklist-only case by turning the global switch back off.
+		settings.access_disabled = 0
+		settings.save(ignore_permissions=True)
+		self.assertTrue(settings.is_blacklisted(user.name), "still blacklisted individually")
+		self.assertFalse(settings.is_blacklisted("someone-else@example.com"))
+
 
 class TestRemoteSite(HubTestCase):
 	def test_transport_token_hash_set_on_validate(self):
@@ -382,6 +428,76 @@ class TestRequestAccessAttribution(HubTestCase):
 		grant = frappe.get_doc("Access Grant", {"jti": jti})
 		self.assertEqual(grant.employee, self.caller_email)
 		self.addCleanup(frappe.delete_doc, "Access Grant", grant.name, True, None, True)
+
+
+class TestAccessDisabledAndBlacklist(HubTestCase):
+	"""access_disabled and a Blacklisted User row must both refuse
+	request_access outright, not just fail silently downstream."""
+
+	def setUp(self):
+		self.site = self.make_remote_site(f"test-blacklist-{self._testMethodName}.localhost")
+		self.caller_email = f"blockable-{self._testMethodName}@example.com"
+		caller = self.make_user(self.caller_email, first_name="Blockable")
+		caller.add_roles("Desk User")
+		self.addCleanup(frappe.set_user, "Administrator")
+
+		self.settings = frappe.get_single("Access Hub Settings")
+		if not self.settings.rules:
+			from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
+				seed_default_policy,
+			)
+
+			seed_default_policy()
+			self.settings = frappe.get_single("Access Hub Settings")
+		self._orig_disabled = self.settings.access_disabled
+		self._orig_blacklist = [row.user for row in self.settings.blacklisted_users]
+		self.addCleanup(self._restore_settings)
+
+	def _restore_settings(self):
+		# Commit explicitly: make_user's cleanup already forced a commit (see
+		# HubTestCase docstring), so this Single's state is outside the
+		# class-level rollback's reach — a leftover row would otherwise
+		# survive to the next test run.
+		settings = frappe.get_single("Access Hub Settings")
+		settings.access_disabled = self._orig_disabled
+		settings.set(
+			"blacklisted_users",
+			[{"user": u} for u in self._orig_blacklist if frappe.db.exists("User", u)],
+		)
+		settings.save(ignore_permissions=True)
+		frappe.db.commit()
+
+	def test_access_disabled_refuses_request(self):
+		from access_hub.api import request_access
+
+		self.settings.access_disabled = 1
+		self.settings.save(ignore_permissions=True)
+
+		frappe.set_user(self.caller_email)
+		with self.assertRaises(frappe.ValidationError):
+			request_access(remote_site=self.site.name)
+
+	def test_blacklisted_user_refuses_request(self):
+		from access_hub.api import request_access
+
+		self.settings.append("blacklisted_users", {"user": self.caller_email})
+		self.settings.save(ignore_permissions=True)
+
+		frappe.set_user(self.caller_email)
+		with self.assertRaises(frappe.ValidationError):
+			request_access(remote_site=self.site.name)
+
+	def test_unaffected_user_can_still_request(self):
+		from access_hub.api import request_access
+
+		frappe.set_user(self.caller_email)
+		result = request_access(remote_site=self.site.name)
+		self.assertIn("redirect_url", result)
+
+		jti = frappe.db.get_value(
+			"Access Grant", {"remote_site": self.site.name}, "jti", order_by="creation desc"
+		)
+		self.addCleanup(frappe.delete_doc, "Access Grant", jti, True, None, True)
 
 
 class TestIngestEndpointsOverRealHttp(HubTestCase):

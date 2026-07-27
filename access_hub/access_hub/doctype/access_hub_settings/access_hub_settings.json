@@ -4,31 +4,57 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "name_suffix",
+  "access_control_section",
+  "access_disabled",
+  "access_control_column_break",
+  "blacklisted_users",
   "policy_section",
   "rules",
-  "session_expiry_seconds",
   "always_log_doctypes",
-  "max_key_size_bytes",
+  "session_expiry_seconds",
+  "logging_section",
   "log_reads",
-  "sync_enabled",
+  "max_key_size_bytes",
   "retention_days",
+  "logging_column_break",
+  "log_sync_enabled",
   "push_grace_days",
-  "name_suffix",
   "current_policy_token",
   "enrollment_section",
   "hub_enrollment_info"
  ],
  "fields": [
   {
-   "fieldname": "enrollment_section",
-   "fieldtype": "Section Break",
-   "label": "Enrollment"
+   "default": "consultant",
+   "description": "Added to the end of an ephemeral user's name, e.g. \"John Doe (consultant)\".",
+   "fieldname": "name_suffix",
+   "fieldtype": "Data",
+   "label": "Name Suffix",
+   "reqd": 1
   },
   {
-   "description": "Hub-wide values every client's access-guard needs. The per-site transport token is set on each Remote Site.",
-   "fieldname": "hub_enrollment_info",
-   "fieldtype": "HTML",
-   "label": "Enrollment Info"
+   "fieldname": "access_control_section",
+   "fieldtype": "Section Break",
+   "label": "Access Control"
+  },
+  {
+   "default": "0",
+   "description": "Refuses new access requests and immediately ends every active session on every client.",
+   "fieldname": "access_disabled",
+   "fieldtype": "Check",
+   "label": "Disable All Access"
+  },
+  {
+   "fieldname": "access_control_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "These users are refused new access requests and have their active sessions immediately ended on every client.",
+   "fieldname": "blacklisted_users",
+   "fieldtype": "Table MultiSelect",
+   "label": "Blacklisted Users",
+   "options": "Blacklisted User"
   },
   {
    "fieldname": "policy_section",
@@ -42,45 +68,45 @@
    "options": "Access Policy Rule"
   },
   {
+   "description": "Changes to these are always logged in full, regardless of the rules above. A Document Type not used on a client site is simply ignored there.",
+   "fieldname": "always_log_doctypes",
+   "fieldtype": "Table",
+   "label": "Always-Log Doctypes",
+   "options": "Always Log Doctype"
+  },
+  {
    "default": "21600",
-   "description": "Effective session length is min(this, the client site's own System Settings session_expiry). Default 6h.",
+   "description": "How long a granted session may stay idle before it's ended. Default 6 hours.",
    "fieldname": "session_expiry_seconds",
    "fieldtype": "Int",
-   "label": "Session Expiry (seconds)",
+   "label": "Maximum Session Lifetime (seconds)",
    "non_negative": 1,
    "reqd": 1
   },
   {
-   "default": "User\nServer Script",
-   "description": "One doctype per line. Writes to these are always logged in full (after_commit), regardless of the deny/warn rules above.",
-   "fieldname": "always_log_doctypes",
-   "fieldtype": "Small Text",
-   "label": "Always-Log Doctypes"
-  },
-  {
-   "default": "524288",
-   "fieldname": "max_key_size_bytes",
-   "fieldtype": "Int",
-   "label": "Max Logged Arg Size (bytes)",
-   "non_negative": 1,
-   "reqd": 1
+   "fieldname": "logging_section",
+   "fieldtype": "Section Break",
+   "label": "Logging"
   },
   {
    "default": "0",
-   "description": "When off, pure-read whitelisted calls (see protocol.READ_SKIP_METHODS) are not logged.",
+   "description": "Also log read-only activity, not just changes.",
    "fieldname": "log_reads",
    "fieldtype": "Check",
    "label": "Log Reads"
   },
   {
-   "default": "1",
-   "description": "Best-effort push of this policy to reachable guards on save; guards also pull hourly regardless.",
-   "fieldname": "sync_enabled",
-   "fieldtype": "Check",
-   "label": "Sync Enabled"
+   "default": "524288",
+   "description": "Logged values larger than this are truncated.",
+   "fieldname": "max_key_size_bytes",
+   "fieldtype": "Int",
+   "label": "Max Logged Value Size (bytes)",
+   "non_negative": 1,
+   "reqd": 1
   },
   {
    "default": "365",
+   "description": "Logs are kept for this long before being deleted, whether or not they've reached the hub yet.",
    "fieldname": "retention_days",
    "fieldtype": "Int",
    "label": "Retention (days)",
@@ -88,20 +114,23 @@
    "reqd": 1
   },
   {
+   "fieldname": "logging_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "description": "Push activity logs to the hub every hour.",
+   "fieldname": "log_sync_enabled",
+   "fieldtype": "Check",
+   "label": "Log Sync Enabled"
+  },
+  {
    "default": "7",
-   "description": "A session's local log file is deleted once (acked by hub AND local age > this) OR age > retention_days.",
+   "description": "Once a log has reached the hub, delete it locally after this many days instead of waiting out the full retention period.",
    "fieldname": "push_grace_days",
    "fieldtype": "Int",
    "label": "Push Grace (days)",
    "non_negative": 1,
-   "reqd": 1
-  },
-  {
-   "default": "consultant",
-   "description": "Appended to the ephemeral user's last_name, e.g. \"John Doe (consultant)\".",
-   "fieldname": "name_suffix",
-   "fieldtype": "Data",
-   "label": "Name Suffix",
    "reqd": 1
   },
   {
@@ -110,6 +139,17 @@
    "hidden": 1,
    "label": "Current Policy Token",
    "read_only": 1
+  },
+  {
+   "fieldname": "enrollment_section",
+   "fieldtype": "Section Break",
+   "label": "Enrollment"
+  },
+  {
+   "description": "Values every client's access-guard needs to be set up. The per-site transport token is set on each Remote Site.",
+   "fieldname": "hub_enrollment_info",
+   "fieldtype": "HTML",
+   "label": "Enrollment Info"
   }
  ],
  "index_web_pages_for_search": 1,

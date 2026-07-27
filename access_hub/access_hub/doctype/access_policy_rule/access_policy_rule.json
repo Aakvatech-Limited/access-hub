@@ -11,8 +11,7 @@
   "action_write",
   "action_delete",
   "action_submit",
-  "action_cancel",
-  "action_read"
+  "action_cancel"
  ],
  "fields": [
   {
@@ -71,14 +70,6 @@
    "fieldtype": "Check",
    "in_list_view": 1,
    "label": "Cancel"
-  },
-  {
-   "columns": 1,
-   "default": "0",
-   "fieldname": "action_read",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "Read"
   }
  ],
  "istable": 1,

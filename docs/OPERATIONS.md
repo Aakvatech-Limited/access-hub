@@ -48,16 +48,13 @@ If any is missing the guard refuses to accept grants (`ClientNotConfiguredError`
 
 ## 3. Enroll a client (hub side)
 
-1. On the hub, open **Access Hub Settings** — the **Enrollment Info** field shows
-   the two hub-wide values (`access_guard_hub_url`, `access_guard_hub_public_key`),
-   each with a copy button. These are the same for every client.
-2. Create a **Remote Site** record for the client (set `host`, `port`, `protocol`;
+1. Create a **Remote Site** record for the client (set `host`, `port`, `protocol`;
    tick **Is FC Site** if it's Frappe-Cloud-managed). On save, a transport token is
-   auto-generated and a dialog shows the full enrollment config **once** — copy the
-   `access_guard_transport_token` now; only its hash is stored.
+   auto-generated and a dialog shows the full enrollment config **once** (all three
+   `access_guard_*` values) — copy it now; only the token's hash is stored.
    - To set a specific token or rotate later: **Update Token** button (leave blank
-     to auto-generate). The dialog reappears with the new token.
-3. Put the three values into the client site's `site_config.json` (step 2 table).
+     to auto-generate). The dialog reappears with the new config.
+2. Put the three values into the client site's `site_config.json`.
 
 The token is shown only at creation/rotation — if you lose it, rotate to get a new
 one (this invalidates the old one).

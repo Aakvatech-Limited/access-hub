@@ -8,6 +8,28 @@ frappe.ui.form.on("Access Hub Settings", {
 		if (info) {
 			render_enrollment_info(frm, info);
 		}
+
+		// Live DocType-name suggestions, but not enforced (ignore_validation on
+		// the field): a doctype absent from THIS site (e.g. an app not
+		// installed here) is still a valid, harmless entry — it simply never
+		// matches any doc_events on a client where it doesn't exist.
+		frm.set_query("document_type", "always_log_doctypes", () => ({
+			query: "frappe.desk.search.search_link",
+			params: { doctype: "DocType" },
+		}));
+	},
+
+	access_disabled(frm) {
+		if (!frm.doc.access_disabled) {
+			return;
+		}
+		frappe.confirm(
+			__(
+				"On save, this will refuse new access requests and immediately end every active session on every client. Continue?"
+			),
+			() => {},
+			() => frm.set_value("access_disabled", 0)
+		);
 	},
 });
 

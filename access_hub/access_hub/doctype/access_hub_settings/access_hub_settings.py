@@ -4,30 +4,34 @@
 import frappe
 from frappe.model.document import Document
 
-from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL
+from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL, POLICY_TOKEN_TTL_DAYS
 from access_hub.protocol import (
 	GUARD_CONF_HUB_PUBLIC_KEY,
 	GUARD_CONF_HUB_URL,
+	POLICY_ACCESS_DISABLED,
 	POLICY_ALWAYS_LOG_DOCTYPES,
+	POLICY_BLACKLISTED_EMAILS,
 	POLICY_DEFAULTS,
 	POLICY_LOG_READS,
+	POLICY_LOG_SYNC_ENABLED,
 	POLICY_MAX_KEY_SIZE_BYTES,
 	POLICY_NAME_SUFFIX,
 	POLICY_PUSH_GRACE_DAYS,
 	POLICY_RETENTION_DAYS,
 	POLICY_RULES,
 	POLICY_SESSION_EXPIRY_SECONDS,
-	POLICY_SYNC_ENABLED,
 	PV,
 	ClientNotConfiguredError,
 )
 from access_hub.utils.crypto import sign_paseto
 
 # Policy actions; each maps to an Access Policy Rule check field named
-# `action_<action>` (the prefix avoids bare-verb fieldnames like `read`/`create`
+# `action_<action>` (the prefix avoids bare-verb fieldnames like `write`/`create`
 # clashing with SQL/Frappe). Used both to read rows into the wire object and to
 # seed defaults, so neither drifts from the protocol's action vocabulary.
-POLICY_ACTIONS = ("create", "write", "delete", "submit", "cancel", "read")
+# NOTE: no "read" — the guard never enforces it (doc_events only cover
+# create/write/submit/cancel/delete), so it'd be a checkbox that does nothing.
+POLICY_ACTIONS = ("create", "write", "delete", "submit", "cancel")
 
 
 class AccessHubSettings(Document):
@@ -62,8 +66,11 @@ class AccessHubSettings(Document):
 		except ClientNotConfiguredError:
 			return
 		frappe.db.set_value(self.doctype, self.name, "current_policy_token", token, update_modified=False)
-		if self.sync_enabled:
-			push_policy_to_all_sites(token)
+		# Policy push is not configurable in v1 - always best-effort, so a kill
+		# switch/blacklist change reaches guards as fast as possible. It's
+		# already fail-open (push_policy_to_all_sites swallows failures) and
+		# backstopped by the guard's own unconditional hourly pull.
+		push_policy_to_all_sites(token)
 
 	def as_policy_dict(self) -> dict:
 		"""Build the normalized policy object (protocol.POLICY_* keys) from this
@@ -79,7 +86,7 @@ class AccessHubSettings(Document):
 			rules = POLICY_DEFAULTS[POLICY_RULES]
 
 		always_log = [
-			d.strip() for d in (self.always_log_doctypes or "").splitlines() if d.strip()
+			row.document_type for row in self.always_log_doctypes if row.document_type
 		] or POLICY_DEFAULTS[POLICY_ALWAYS_LOG_DOCTYPES]
 
 		return {
@@ -89,16 +96,32 @@ class AccessHubSettings(Document):
 			POLICY_ALWAYS_LOG_DOCTYPES: always_log,
 			POLICY_MAX_KEY_SIZE_BYTES: self.max_key_size_bytes or POLICY_DEFAULTS[POLICY_MAX_KEY_SIZE_BYTES],
 			POLICY_LOG_READS: bool(self.log_reads),
-			POLICY_SYNC_ENABLED: bool(self.sync_enabled),
+			POLICY_LOG_SYNC_ENABLED: bool(self.log_sync_enabled),
 			POLICY_RETENTION_DAYS: self.retention_days or POLICY_DEFAULTS[POLICY_RETENTION_DAYS],
 			POLICY_PUSH_GRACE_DAYS: self.push_grace_days or POLICY_DEFAULTS[POLICY_PUSH_GRACE_DAYS],
 			POLICY_NAME_SUFFIX: self.name_suffix or POLICY_DEFAULTS[POLICY_NAME_SUFFIX],
+			POLICY_ACCESS_DISABLED: bool(self.access_disabled),
+			# User.name IS the email, so row.user is already the emp_email the
+			# guard's grant files key on — no separate email field needed.
+			POLICY_BLACKLISTED_EMAILS: [row.user for row in self.blacklisted_users if row.user],
+		}
+
+	def is_blacklisted(self, employee: str) -> bool:
+		return bool(self.access_disabled) or employee in {
+			row.user for row in self.blacklisted_users if row.user
 		}
 
 	def build_and_sign_policy_token(self) -> str:
 		policy = self.as_policy_dict()
 		claims = dict(policy)
 		claims["pv"] = PV
+		# verify_and_decode() requires exp on every token it checks (grant or
+		# policy) - one uniform check, no special-casing by token type. A
+		# guard re-verifies on every save-triggered push and guaranteed hourly
+		# pull, so this only bites an already-unreachable guard.
+		now = frappe.utils.now_datetime()
+		claims["iat"] = now.isoformat()
+		claims["exp"] = frappe.utils.add_to_date(now, days=POLICY_TOKEN_TTL_DAYS).isoformat()
 		return sign_paseto(claims)
 
 
@@ -156,4 +179,8 @@ def seed_default_policy():
 	for action in default_rule["actions"]:
 		row[f"action_{action}"] = 1
 	settings.append("rules", row)
+
+	for doctype in POLICY_DEFAULTS[POLICY_ALWAYS_LOG_DOCTYPES]:
+		settings.append("always_log_doctypes", {"document_type": doctype})
+
 	settings.save(ignore_permissions=True)
