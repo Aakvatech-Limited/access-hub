@@ -36,81 +36,27 @@ def generate_keypair(ctx, force, site):
 	try:
 		from access_hub.constants import CONF_HUB_PRIVATE_KEY, CONF_HUB_PUBLIC_KEY_LOCAL
 
-		existing = frappe.conf.get(CONF_HUB_PRIVATE_KEY)
-		if existing and not force:
+		if frappe.conf.get(CONF_HUB_PRIVATE_KEY) and not force:
 			click.secho(
 				f"{CONF_HUB_PRIVATE_KEY} already set in site_config.json. "
 				"Refusing to overwrite. Pass --force to regenerate. "
-				"Run `bench access-hub-enroll-info` to see the current public key again.",
+				"The current public key is on the Access Hub Settings form.",
 				fg="red",
 			)
 			raise click.exceptions.Exit(1)
 
-		from frappe.installer import update_site_config
+		from access_hub.utils.crypto import ensure_keypair
 
-		from access_hub.utils.crypto import generate_keypair_paserk
-
-		secret_paserk, public_paserk = generate_keypair_paserk()
-		update_site_config(CONF_HUB_PRIVATE_KEY, secret_paserk)
-		update_site_config(CONF_HUB_PUBLIC_KEY_LOCAL, public_paserk)
+		public_paserk = ensure_keypair(force=force)
 
 		click.secho("Keypair generated.", fg="green")
 		click.secho(f"Private key written to site_config.json ({CONF_HUB_PRIVATE_KEY}).", fg="green")
 		click.secho(f"Public key written to site_config.json ({CONF_HUB_PUBLIC_KEY_LOCAL}).", fg="green")
 		click.secho("Public key (paste into each client's access_guard_hub_public_key):", fg="yellow")
 		click.echo(public_paserk)
-		click.secho(
-			"Run `bench access-hub-enroll-info` any time to see full enrollment info again.", fg="cyan"
-		)
+		click.secho("Full enrollment info is on the Access Hub Settings form.", fg="cyan")
 	finally:
 		frappe.destroy()
 
 
-@click.command("access-hub-enroll-info")
-@click.option("--site", help="Site to operate on (defaults to the bench-selected site).")
-@click.pass_context
-def enroll_info(ctx, site):
-	"""Print everything needed to enroll a new client site with access-guard.
-
-	Shows the hub URL, the hub's public key (paste into the client's
-	`access_guard_hub_public_key`), and reminds the operator that a per-client
-	transport token is minted from the Remote Site doctype (see its "Get
-	Enrollment Info" action for the full three-value snippet for one client).
-	"""
-	site = site or (ctx.obj["sites"][0] if ctx.obj.get("sites") else None)
-	if not site:
-		click.secho("No site specified. Use --site <sitename>.", fg="red")
-		raise click.exceptions.Exit(1)
-
-	frappe.init(site=site)
-	frappe.connect()
-	try:
-		from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL
-
-		public_paserk = frappe.conf.get(CONF_HUB_PUBLIC_KEY_LOCAL)
-		if not public_paserk:
-			click.secho(
-				"No keypair found. Run `bench access-hub-generate-keypair` first.",
-				fg="red",
-			)
-			raise click.exceptions.Exit(1)
-
-		hub_url = frappe.utils.get_url()
-
-		click.secho("Access Hub enrollment info", fg="green", bold=True)
-		click.echo("")
-		click.secho("access_guard_hub_url:", fg="yellow")
-		click.echo(f"  {hub_url}")
-		click.secho("access_guard_hub_public_key:", fg="yellow")
-		click.echo(f"  {public_paserk}")
-		click.echo("")
-		click.echo(
-			"A per-client access_guard_transport_token is minted per Remote Site — "
-			"create or open a Remote Site record on the hub desk and use its "
-			'"Get Enrollment Info" action for the full snippet for that client.'
-		)
-	finally:
-		frappe.destroy()
-
-
-commands = [generate_keypair, enroll_info]
+commands = [generate_keypair]

@@ -44,21 +44,22 @@ def generate_keypair_paserk() -> tuple:
 	return priv_key.to_paserk(), pub_key.to_paserk()
 
 
-def ensure_keypair() -> bool:
-	"""Generate and persist a keypair to site_config.json if none exists yet.
+def ensure_keypair(force: bool = False) -> str | None:
+	"""Generate and persist a fresh keypair to site_config.json (both the secret
+	and the hub's own public copy). The single writer of these keys.
 
-	Idempotent — a no-op when a private key is already set. Returns True if a
-	new keypair was written. Never overwrites an existing key (use the
-	`--force` CLI path for deliberate rotation).
+	Idempotent by default — a no-op returning None when a private key is already
+	set; pass `force=True` to overwrite (deliberate rotation). Returns the public
+	paserk (`k4.public...`) when a keypair was written, else None.
 	"""
-	if frappe.conf.get(CONF_HUB_PRIVATE_KEY):
-		return False
+	if frappe.conf.get(CONF_HUB_PRIVATE_KEY) and not force:
+		return None
 	from frappe.installer import update_site_config
 
 	secret_paserk, public_paserk = generate_keypair_paserk()
 	update_site_config(CONF_HUB_PRIVATE_KEY, secret_paserk)
 	update_site_config(CONF_HUB_PUBLIC_KEY_LOCAL, public_paserk)
-	return True
+	return public_paserk
 
 
 def sign_paseto(claims: dict) -> str:

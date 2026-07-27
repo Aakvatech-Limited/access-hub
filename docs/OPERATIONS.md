@@ -20,12 +20,13 @@ Install auto-generates the PASETO signing keypair into the site's
 the default policy (`User → deny create/write/delete`). Nothing else to configure
 to get started.
 
-To regenerate the keypair (rotation) or view it:
+To regenerate the keypair (rotation):
 
 ```bash
 bench --site <helpdesk-site> access-hub-generate-keypair   # --force to overwrite
-bench --site <helpdesk-site> access-hub-enroll-info         # prints hub URL + public key
 ```
+
+The hub URL + public key are shown on the **Access Hub Settings** form (see step 3).
 
 ## 2. Install a guard (on a client site)
 

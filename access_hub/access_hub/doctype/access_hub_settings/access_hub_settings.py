@@ -23,6 +23,12 @@ from access_hub.protocol import (
 )
 from access_hub.utils.crypto import sign_paseto
 
+# Policy actions; each maps to an Access Policy Rule check field named
+# `action_<action>` (the prefix avoids bare-verb fieldnames like `read`/`create`
+# clashing with SQL/Frappe). Used both to read rows into the wire object and to
+# seed defaults, so neither drifts from the protocol's action vocabulary.
+POLICY_ACTIONS = ("create", "write", "delete", "submit", "cancel", "read")
+
 
 class AccessHubSettings(Document):
 	def onload(self):
@@ -64,17 +70,7 @@ class AccessHubSettings(Document):
 		Single doctype's fields, per docs/PROTOCOL.md §4."""
 		rules = []
 		for row in self.rules:
-			actions = []
-			for action, fieldname in (
-				("create", "action_create"),
-				("write", "action_write"),
-				("delete", "action_delete"),
-				("submit", "action_submit"),
-				("cancel", "action_cancel"),
-				("read", "action_read"),
-			):
-				if row.get(fieldname):
-					actions.append(action)
+			actions = [action for action in POLICY_ACTIONS if row.get(f"action_{action}")]
 			if not actions:
 				continue
 			rules.append({"doctype": row.document_type, "actions": actions, "mode": row.mode})
@@ -155,14 +151,9 @@ def seed_default_policy():
 			settings.set(fieldname, POLICY_DEFAULTS[policy_key])
 
 	default_rule = POLICY_DEFAULTS[POLICY_RULES][0]
-	settings.append(
-		"rules",
-		{
-			"document_type": default_rule["doctype"],
-			"mode": default_rule["mode"],
-			"action_create": 1,
-			"action_write": 1,
-			"action_delete": 1,
-		},
-	)
+	row = {"document_type": default_rule["doctype"], "mode": default_rule["mode"]}
+	# check the action fields named by the protocol default (no hardcoding)
+	for action in default_rule["actions"]:
+		row[f"action_{action}"] = 1
+	settings.append("rules", row)
 	settings.save(ignore_permissions=True)
