@@ -10,13 +10,13 @@ frappe.ui.form.on("Access Hub Settings", {
 		}
 
 		// Live DocType-name suggestions, but not enforced (ignore_validation on
-		// the field): a doctype absent from THIS site (e.g. an app not
-		// installed here) is still a valid, harmless entry — it simply never
-		// matches any doc_events on a client where it doesn't exist.
-		frm.set_query("document_type", "always_log_doctypes", () => ({
-			query: "frappe.desk.search.search_link",
-			params: { doctype: "DocType" },
-		}));
+		// the field): a doctype absent from THIS site (e.g. it only exists on a
+		// client) is still a valid, harmless entry.
+		const doctype_query = () => ({
+			query: "access_hub.access_hub.doctype.access_hub_settings.access_hub_settings.doctype_autocomplete",
+		});
+		frm.set_query("document_type", "always_log_doctypes", doctype_query);
+		frm.set_query("document_type", "rules", doctype_query);
 	},
 
 	access_disabled(frm) {

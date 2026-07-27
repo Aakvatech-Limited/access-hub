@@ -11,15 +11,15 @@
   "blacklisted_users",
   "policy_section",
   "rules",
-  "always_log_doctypes",
   "session_expiry_seconds",
   "logging_section",
   "log_reads",
   "max_key_size_bytes",
-  "retention_days",
+  "always_log_doctypes",
   "logging_column_break",
   "log_sync_enabled",
   "push_grace_days",
+  "retention_days",
   "current_policy_token",
   "enrollment_section",
   "hub_enrollment_info"
@@ -66,13 +66,6 @@
    "fieldtype": "Table",
    "label": "Deny / Warn Rules",
    "options": "Access Policy Rule"
-  },
-  {
-   "description": "Changes to these are always logged in full, regardless of the rules above. A Document Type not used on a client site is simply ignored there.",
-   "fieldname": "always_log_doctypes",
-   "fieldtype": "Table",
-   "label": "Always-Log Doctypes",
-   "options": "Always Log Doctype"
   },
   {
    "default": "21600",
@@ -132,6 +125,13 @@
    "label": "Push Grace (days)",
    "non_negative": 1,
    "reqd": 1
+  },
+  {
+   "description": "Changes to these are always logged in full, regardless of the rules above. A Document Type not used on a client site is simply ignored there.",
+   "fieldname": "always_log_doctypes",
+   "fieldtype": "Table",
+   "label": "Always-Log Doctypes",
+   "options": "Always Log Doctype"
   },
   {
    "fieldname": "current_policy_token",

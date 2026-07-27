@@ -16,10 +16,10 @@
  "fields": [
   {
    "fieldname": "document_type",
-   "fieldtype": "Link",
+   "fieldtype": "Autocomplete",
+   "ignore_validation": 1,
    "in_list_view": 1,
    "label": "Document Type",
-   "options": "DocType",
    "reqd": 1
   },
   {

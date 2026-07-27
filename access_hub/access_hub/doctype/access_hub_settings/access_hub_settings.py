@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import frappe
+from frappe.desk.search import search_link
 from frappe.model.document import Document
 
 from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL, POLICY_TOKEN_TTL_DAYS
@@ -147,6 +148,15 @@ def disabled_granted_user_emails() -> set[str]:
 		as_dict=True,
 	)
 	return {row.emp_email for row in rows}
+
+
+@frappe.whitelist()
+def doctype_autocomplete(txt: str | None = None) -> list:
+	"""Autocomplete source for Always-Log Doctypes. A thin wrapper, not a
+	direct client-side call to search_link: the Autocomplete control's
+	frappe.call doesn't shape args (filters/page_length) the way the Link
+	field's own search_link invocation does, and passing it raw 500s."""
+	return search_link("DocType", txt or "")
 
 
 def get_current_policy_token() -> str:
