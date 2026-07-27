@@ -28,7 +28,6 @@ async function setupForm({ doc, call }) {
         actions: [
             {
                 label: "Access Sites",
-                icon: "server",
                 onClick: () => window.open(url, "_blank"),
             },
         ],
