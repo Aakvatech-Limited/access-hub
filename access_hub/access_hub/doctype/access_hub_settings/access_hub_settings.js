@@ -18,18 +18,22 @@ function render_enrollment_info(frm, info) {
 		["access_guard_hub_url", info.access_guard_hub_url],
 		["access_guard_hub_public_key", info.access_guard_hub_public_key],
 	];
-	let html = "<table class='table table-bordered' style='table-layout:fixed;width:100%;'>";
+	let html = "";
 	rows.forEach(([key, value], i) => {
 		html += `
-			<tr>
-				<td style="width:35%;"><code>${key}</code></td>
-				<td style="word-break:break-all;"><code>${frappe.utils.escape_html(value || "")}</code></td>
-				<td style="width:1%;white-space:nowrap;">
-					<button class="btn btn-xs btn-default" data-copy-row="${i}">${__("Copy")}</button>
-				</td>
-			</tr>`;
+			<div class="mb-3">
+				<div class="text-muted small mb-1"><code>${key}</code></div>
+				<div class="input-group">
+					<input type="text" class="form-control" readonly
+						style="border-top-right-radius:0;border-bottom-right-radius:0;"
+						value="${frappe.utils.escape_html(value || "")}">
+					<button class="btn btn-default" data-copy-row="${i}"
+						style="border-top-left-radius:0;border-bottom-left-radius:0;margin-left:-1px;">${__(
+							"Copy"
+						)}</button>
+				</div>
+			</div>`;
 	});
-	html += "</table>";
 
 	const $wrapper = frm.get_field("hub_enrollment_info").$wrapper;
 	$wrapper.html(html);

@@ -35,7 +35,7 @@ frappe.ui.form.on("Remote Site", {
 		// Rotating the token writes to the doc, so gate on write permission —
 		// read-only roles never see this, and rotate_transport_token's
 		// doc.save() would reject them at the API even if they did.
-		if (frm.perm[0] && frm.perm[0].write) {
+		if (frappe.perm.has_perm(frm.doctype, 0, "write", frm.doc)) {
 			frm.add_custom_button(__("Update Token"), () => {
 				frappe.prompt(
 					[

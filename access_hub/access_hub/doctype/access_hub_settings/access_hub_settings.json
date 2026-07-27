@@ -4,8 +4,6 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "enrollment_section",
-  "hub_enrollment_info",
   "policy_section",
   "rules",
   "session_expiry_seconds",
@@ -16,7 +14,9 @@
   "retention_days",
   "push_grace_days",
   "name_suffix",
-  "current_policy_token"
+  "current_policy_token",
+  "enrollment_section",
+  "hub_enrollment_info"
  ],
  "fields": [
   {

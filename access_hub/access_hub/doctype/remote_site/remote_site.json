@@ -27,7 +27,6 @@
    "default": "443",
    "fieldname": "port",
    "fieldtype": "Int",
-   "in_list_view": 1,
    "label": "Port",
    "non_negative": 1,
    "reqd": 1
@@ -36,7 +35,6 @@
    "default": "https",
    "fieldname": "protocol",
    "fieldtype": "Select",
-   "in_list_view": 1,
    "label": "Protocol",
    "options": "https\nhttp",
    "reqd": 1
