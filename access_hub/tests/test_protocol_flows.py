@@ -10,25 +10,24 @@ from frappe.tests.utils import FrappeTestCase
 from pyseto import Key
 
 from access_hub.access_hub.doctype.access_grant.access_grant import (
-    build_accept_url,
-    create_and_mint,
+	build_accept_url,
+	create_and_mint,
 )
-from access_hub.access_hub.doctype.remote_access_settings.remote_access_settings import (
-    get_current_policy_token,
+from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
+	get_current_policy_token,
 )
 from access_hub.access_hub.doctype.session_log_file.session_log_file import (
-    append_lines,
-    base_dir,
-    path_for,
+	append_lines,
+	base_dir,
+	path_for,
 )
+from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL, TRANSPORT_TOKEN_MIN_LEN
 from access_hub.protocol import (
-    CONF_HUB_PUBLIC_KEY_LOCAL,
-    POLICY_DEFAULTS,
-    POLICY_RULES,
-    PV,
-    TRANSPORT_TOKEN_HEADER,
-    TRANSPORT_TOKEN_MIN_LEN,
-    transport_token_hash,
+	POLICY_DEFAULTS,
+	POLICY_RULES,
+	PV,
+	TRANSPORT_TOKEN_HEADER,
+	transport_token_hash,
 )
 
 
@@ -155,14 +154,14 @@ class TestKeypairAndGrantMinting(HubTestCase):
 class TestPolicyToken(HubTestCase):
 	def test_policy_token_round_trips_and_seeds_defaults(self):
 		"""policy token signs + round-trips; POLICY_DEFAULTS seed present."""
-		settings = frappe.get_single("Remote Access Settings")
+		settings = frappe.get_single("Access Hub Settings")
 		if not settings.rules:
-			from access_hub.access_hub.doctype.remote_access_settings.remote_access_settings import (
+			from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
 				after_install,
 			)
 
 			after_install()
-			settings = frappe.get_single("Remote Access Settings")
+			settings = frappe.get_single("Access Hub Settings")
 
 		token = get_current_policy_token()
 		pub = get_public_key()

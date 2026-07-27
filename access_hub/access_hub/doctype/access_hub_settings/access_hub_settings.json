@@ -9,10 +9,10 @@
   "always_log_doctypes",
   "max_key_size_bytes",
   "log_reads",
-  "monitoring_notice_text",
   "sync_enabled",
   "retention_days",
   "push_grace_days",
+  "name_suffix",
   "current_policy_token"
  ],
  "fields": [
@@ -54,12 +54,6 @@
    "label": "Log Reads"
   },
   {
-   "default": "Your activity on this site is being recorded for audit.",
-   "fieldname": "monitoring_notice_text",
-   "fieldtype": "Small Text",
-   "label": "Monitoring Notice Text"
-  },
-  {
    "default": "1",
    "description": "Best-effort push of this policy to reachable guards on save; guards also pull hourly regardless.",
    "fieldname": "sync_enabled",
@@ -84,6 +78,14 @@
    "reqd": 1
   },
   {
+   "default": "consultant",
+   "description": "Appended to the ephemeral user's last_name, e.g. \"John Doe (consultant)\".",
+   "fieldname": "name_suffix",
+   "fieldtype": "Data",
+   "label": "Name Suffix",
+   "reqd": 1
+  },
+  {
    "fieldname": "current_policy_token",
    "fieldtype": "Long Text",
    "hidden": 1,
@@ -97,7 +99,7 @@
  "modified": "2026-01-01 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Access Hub",
- "name": "Remote Access Settings",
+ "name": "Access Hub Settings",
  "owner": "Administrator",
  "permissions": [
   {

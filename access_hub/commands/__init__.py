@@ -62,7 +62,7 @@ def generate_keypair(ctx, force, site):
 	frappe.init(site=site)
 	frappe.connect()
 	try:
-		from access_hub.protocol import CONF_HUB_PRIVATE_KEY, CONF_HUB_PUBLIC_KEY_LOCAL
+		from access_hub.constants import CONF_HUB_PRIVATE_KEY, CONF_HUB_PUBLIC_KEY_LOCAL
 
 		existing = frappe.conf.get(CONF_HUB_PRIVATE_KEY)
 		if existing and not force:
@@ -86,7 +86,9 @@ def generate_keypair(ctx, force, site):
 		click.secho(f"Public key written to site_config.json ({CONF_HUB_PUBLIC_KEY_LOCAL}).", fg="green")
 		click.secho("Public key (paste into each client's access_guard_hub_public_key):", fg="yellow")
 		click.echo(public_paserk)
-		click.secho("Run `bench access-hub-enroll-info` any time to see full enrollment info again.", fg="cyan")
+		click.secho(
+			"Run `bench access-hub-enroll-info` any time to see full enrollment info again.", fg="cyan"
+		)
 	finally:
 		frappe.destroy()
 
@@ -110,7 +112,7 @@ def enroll_info(ctx, site):
 	frappe.init(site=site)
 	frappe.connect()
 	try:
-		from access_hub.protocol import CONF_HUB_PUBLIC_KEY_LOCAL
+		from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL
 
 		public_paserk = frappe.conf.get(CONF_HUB_PUBLIC_KEY_LOCAL)
 		if not public_paserk:

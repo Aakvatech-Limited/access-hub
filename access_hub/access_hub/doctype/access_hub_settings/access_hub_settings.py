@@ -5,22 +5,22 @@ import frappe
 from frappe.model.document import Document
 
 from access_hub.protocol import (
-    POLICY_ALWAYS_LOG_DOCTYPES,
-    POLICY_DEFAULTS,
-    POLICY_LOG_READS,
-    POLICY_MAX_KEY_SIZE_BYTES,
-    POLICY_MONITORING_NOTICE_TEXT,
-    POLICY_PUSH_GRACE_DAYS,
-    POLICY_RETENTION_DAYS,
-    POLICY_RULES,
-    POLICY_SESSION_EXPIRY_SECONDS,
-    POLICY_SYNC_ENABLED,
-    PV,
+	POLICY_ALWAYS_LOG_DOCTYPES,
+	POLICY_DEFAULTS,
+	POLICY_LOG_READS,
+	POLICY_MAX_KEY_SIZE_BYTES,
+	POLICY_NAME_SUFFIX,
+	POLICY_PUSH_GRACE_DAYS,
+	POLICY_RETENTION_DAYS,
+	POLICY_RULES,
+	POLICY_SESSION_EXPIRY_SECONDS,
+	POLICY_SYNC_ENABLED,
+	PV,
 )
 from access_hub.utils.crypto import sign_paseto
 
 
-class RemoteAccessSettings(Document):
+class AccessHubSettings(Document):
 	def validate(self):
 		self._validate_rules()
 
@@ -31,9 +31,7 @@ class RemoteAccessSettings(Document):
 
 	def on_update(self):
 		token = self.build_and_sign_policy_token()
-		frappe.db.set_value(
-			self.doctype, self.name, "current_policy_token", token, update_modified=False
-		)
+		frappe.db.set_value(self.doctype, self.name, "current_policy_token", token, update_modified=False)
 		if self.sync_enabled:
 			push_policy_to_all_sites(token)
 
@@ -61,9 +59,7 @@ class RemoteAccessSettings(Document):
 			rules = POLICY_DEFAULTS[POLICY_RULES]
 
 		always_log = [
-			d.strip()
-			for d in (self.always_log_doctypes or "").splitlines()
-			if d.strip()
+			d.strip() for d in (self.always_log_doctypes or "").splitlines() if d.strip()
 		] or POLICY_DEFAULTS[POLICY_ALWAYS_LOG_DOCTYPES]
 
 		return {
@@ -71,14 +67,12 @@ class RemoteAccessSettings(Document):
 			POLICY_SESSION_EXPIRY_SECONDS: self.session_expiry_seconds
 			or POLICY_DEFAULTS[POLICY_SESSION_EXPIRY_SECONDS],
 			POLICY_ALWAYS_LOG_DOCTYPES: always_log,
-			POLICY_MAX_KEY_SIZE_BYTES: self.max_key_size_bytes
-			or POLICY_DEFAULTS[POLICY_MAX_KEY_SIZE_BYTES],
+			POLICY_MAX_KEY_SIZE_BYTES: self.max_key_size_bytes or POLICY_DEFAULTS[POLICY_MAX_KEY_SIZE_BYTES],
 			POLICY_LOG_READS: bool(self.log_reads),
-			POLICY_MONITORING_NOTICE_TEXT: self.monitoring_notice_text
-			or POLICY_DEFAULTS[POLICY_MONITORING_NOTICE_TEXT],
 			POLICY_SYNC_ENABLED: bool(self.sync_enabled),
 			POLICY_RETENTION_DAYS: self.retention_days or POLICY_DEFAULTS[POLICY_RETENTION_DAYS],
 			POLICY_PUSH_GRACE_DAYS: self.push_grace_days or POLICY_DEFAULTS[POLICY_PUSH_GRACE_DAYS],
+			POLICY_NAME_SUFFIX: self.name_suffix or POLICY_DEFAULTS[POLICY_NAME_SUFFIX],
 		}
 
 	def build_and_sign_policy_token(self) -> str:
@@ -90,13 +84,13 @@ class RemoteAccessSettings(Document):
 
 def get_current_policy_token() -> str:
 	"""Return the current signed policy token, (re)building it if missing."""
-	settings = frappe.get_single("Remote Access Settings")
-	token = frappe.db.get_single_value("Remote Access Settings", "current_policy_token")
+	settings = frappe.get_single("Access Hub Settings")
+	token = frappe.db.get_single_value("Access Hub Settings", "current_policy_token")
 	if token:
 		return token
 	token = settings.build_and_sign_policy_token()
 	frappe.db.set_value(
-		"Remote Access Settings", settings.name, "current_policy_token", token, update_modified=False
+		"Access Hub Settings", settings.name, "current_policy_token", token, update_modified=False
 	)
 	return token
 
@@ -116,9 +110,9 @@ def push_policy_to_all_sites(token: str):
 
 
 def after_install():
-	"""Idempotent seed: create the Remote Access Settings Single with the
+	"""Idempotent seed: create the Access Hub Settings Single with the
 	protocol's default deny rule if it doesn't already have any rules."""
-	settings = frappe.get_single("Remote Access Settings")
+	settings = frappe.get_single("Access Hub Settings")
 	if settings.rules:
 		return
 	default_rule = POLICY_DEFAULTS[POLICY_RULES][0]

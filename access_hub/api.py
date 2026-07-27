@@ -5,13 +5,13 @@ from functools import wraps
 
 import frappe
 
+from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL
 from access_hub.protocol import (
-    CONF_HUB_PUBLIC_KEY_LOCAL,
-    TRANSPORT_TOKEN_HEADER,
-    AccessProtocolError,
-    TransportAuthError,
-    check_pv,
-    transport_token_hash,
+	TRANSPORT_TOKEN_HEADER,
+	AccessProtocolError,
+	TransportAuthError,
+	check_pv,
+	transport_token_hash,
 )
 
 
@@ -41,8 +41,7 @@ def get_enrollment_info(remote_site: str):
 	public_key = frappe.conf.get(CONF_HUB_PUBLIC_KEY_LOCAL)
 	if not public_key:
 		frappe.throw(
-			"No hub keypair found. Run `bench access-hub-generate-keypair` on the "
-			"hub site first."
+			"No hub keypair found. Run `bench access-hub-generate-keypair` on the " "hub site first."
 		)
 
 	doc = frappe.get_doc("Remote Site", remote_site)
@@ -165,7 +164,7 @@ def ingest_endpoint(fn):
 
 @ingest_endpoint
 def get_policy(site):
-	from access_hub.access_hub.doctype.remote_access_settings.remote_access_settings import (
+	from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
 		get_current_policy_token,
 	)
 
@@ -195,7 +194,12 @@ def push_logs(site, jti: str | None = None, host: str | None = None, session_met
 	get_or_create(jti, site.name, session_meta)
 
 	added = append_lines(site.name, jti, ndjson or "")
-	upsert_index(site.name, jti, employee=session_meta.get("employee") or session_meta.get("emp_email"), added_lines=added)
+	upsert_index(
+		site.name,
+		jti,
+		employee=session_meta.get("employee") or session_meta.get("emp_email"),
+		added_lines=added,
+	)
 
 	if session_meta.get("end_time") or session_meta.get("logout_reason"):
 		log = frappe.get_doc("Session Log", jti)
@@ -210,7 +214,12 @@ def push_logs(site, jti: str | None = None, host: str | None = None, session_met
 
 @ingest_endpoint
 def announce(
-	site, host: str | None = None, port=None, protocol: str | None = None, app_version: str | None = None, **kwargs
+	site,
+	host: str | None = None,
+	port=None,
+	protocol: str | None = None,
+	app_version: str | None = None,
+	**kwargs,
 ):
 	from access_hub.access_hub.doctype.remote_site.remote_site import announce as announce_upsert
 

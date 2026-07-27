@@ -1,6 +1,11 @@
 ### Access Hub
 
-Central issuer for ephemeral Frappe site access
+Central issuer for ephemeral Frappe site access.
+
+Pairs with [Access Guard](https://github.com/Aakvatech-Limited/access-guard), the client-side
+enforcement and logging app installed on each site being granted access. See
+[`docs/DESIGN.md`](docs/DESIGN.md) and [`docs/PROTOCOL.md`](docs/PROTOCOL.md) for the shared
+design and wire protocol (this repo is authoritative for both).
 
 ### Installation
 
@@ -8,7 +13,7 @@ You can install this app using the [bench](https://github.com/frappe/bench) CLI:
 
 ```bash
 cd $PATH_TO_YOUR_BENCH
-bench get-app $URL_OF_THIS_REPO --branch develop
+bench get-app https://github.com/Aakvatech-Limited/access-hub --branch develop
 bench install-app access_hub
 ```
 

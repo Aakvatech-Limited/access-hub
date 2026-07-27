@@ -7,13 +7,13 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import add_to_date, now_datetime
 
+from access_hub.constants import GRANT_TTL_SECONDS_DEFAULT
 from access_hub.protocol import (
-    CLAIM_EMP_EMAIL,
-    CLAIM_EMP_NAME,
-    CLAIM_JTI,
-    CLAIM_PV,
-    GRANT_TTL_SECONDS_DEFAULT,
-    PV,
+	CLAIM_EMP_EMAIL,
+	CLAIM_EMP_NAME,
+	CLAIM_JTI,
+	CLAIM_PV,
+	PV,
 )
 from access_hub.utils.crypto import sign_paseto
 

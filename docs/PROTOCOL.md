@@ -2,8 +2,10 @@
 
 This is the **single source of truth** shared by access-hub and access-guard. Both apps
 implement against it independently; nothing here is negotiable at build time. The machine-readable
-half of this spec is `protocol.py` (constants, error classes, helpers), vendored **byte-identical**
-into both apps at `<app>/<app>/protocol.py`.
+half of this spec is `protocol.py` (token claims, the policy document, the error taxonomy),
+vendored **byte-identical** into both apps at `<app>/<app>/protocol.py`. Constants used by only one
+side (site_config.json keys, on-disk layout, etc.) live in that app's own `<app>/<app>/constants.py`
+instead — not vendored, since only one side ever needs them.
 
 If you are building one app, treat the *other* side of every exchange below as fixed. Integration
 is verified after both apps are independently green.
@@ -86,10 +88,10 @@ Policy object keys (defaults live in `protocol.py::POLICY_DEFAULTS`):
   "always_log_doctypes": ["User", "Server Script"],
   "max_key_size_bytes": 524288,
   "log_reads": false,
-  "monitoring_notice_text": "...",
   "sync_enabled": true,
   "retention_days": 365,
-  "push_grace_days": 7
+  "push_grace_days": 7,
+  "name_suffix": "consultant"
 }
 ```
 
@@ -154,5 +156,6 @@ Request logging: log **every** whitelisted call except, when `log_reads` is fals
 
 ## 8. Version / errors
 
-`pv = 1`. Error codes + HTTP statuses are defined once in `protocol.py` (`ERROR_BY_CODE`). v1
-supports exactly `pv=1`; anything else is `ProtocolVersionError`, not a degraded parse.
+`pv = 1`. Error codes + HTTP statuses are defined once in `protocol.py` as the `AccessProtocolError`
+subclass hierarchy. v1 supports exactly `pv=1`; anything else is `ProtocolVersionError`, not a
+degraded parse.

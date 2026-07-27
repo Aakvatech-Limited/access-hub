@@ -1,7 +1,8 @@
 # access-hub — build plan (v1)
 
-> **Parallel scope.** You own **access-hub only**. Do not edit access-guard. The wire contract is
-> frozen in [`docs/PROTOCOL.md`](PROTOCOL.md) and the shared code in
+> **Parallel scope.** You own **access-hub only**. Do not edit
+> [access-guard](https://github.com/Aakvatech-Limited/access-guard). The wire contract is frozen in
+> [`docs/PROTOCOL.md`](PROTOCOL.md) (this repo is authoritative for it) and the shared code in
 > [`access_hub/protocol.py`](../access_hub/protocol.py) — implement against them; do not change
 > them without a coordinated change to the guard's identical copy. Full design rationale is in
 > [`docs/DESIGN.md`](DESIGN.md); background in [`docs/CONTEXT.md`](CONTEXT.md).
@@ -39,9 +40,10 @@ The hub runs on the helpdesk site, which is **not** attacker-controlled, so DocT
    clear message if it's already been rotated away). This is the "help" surface the user asked for
    when enrolling a new site — it must not require reading site_config.json by hand.
 
-3. **Remote Access Settings (Single).** All `POLICY_*` fields from `protocol.POLICY_DEFAULTS`
+3. **Access Hub Settings (Single).** All `POLICY_*` fields from `protocol.POLICY_DEFAULTS`
    (deny/warn rule child table → serialized to the normalized `rules` list; `session_expiry`,
-   always-log doctypes, max key size, `log_reads`, notice text, sync toggle, retention, push grace).
+   always-log doctypes, max key size, `log_reads`, notice text, sync toggle, retention, push grace,
+   name suffix).
    On save: build the policy object, sign it as a PASETO `v4.public` **policy token**, and
    best-effort push to reachable guards (`receive_policy`); failures are swallowed.
 

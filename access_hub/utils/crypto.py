@@ -8,7 +8,8 @@ through here so key-loading logic lives in exactly one place.
 import frappe
 from pyseto import Key
 
-from access_hub.protocol import CONF_HUB_PRIVATE_KEY, ClientNotConfiguredError
+from access_hub.constants import CONF_HUB_PRIVATE_KEY
+from access_hub.protocol import ClientNotConfiguredError
 
 
 def get_private_key() -> Key:

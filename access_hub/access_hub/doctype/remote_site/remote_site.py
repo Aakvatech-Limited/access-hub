@@ -6,7 +6,8 @@ import secrets
 import frappe
 from frappe.model.document import Document
 
-from access_hub.protocol import TRANSPORT_TOKEN_MIN_LEN, transport_token_hash
+from access_hub.constants import TRANSPORT_TOKEN_MIN_LEN
+from access_hub.protocol import transport_token_hash
 
 
 class RemoteSite(Document):
@@ -24,9 +25,7 @@ class RemoteSite(Document):
 
 	def _validate_token_length(self):
 		if self.transport_token and len(self.transport_token) < TRANSPORT_TOKEN_MIN_LEN:
-			frappe.throw(
-				f"Transport Token must be at least {TRANSPORT_TOKEN_MIN_LEN} characters long."
-			)
+			frappe.throw(f"Transport Token must be at least {TRANSPORT_TOKEN_MIN_LEN} characters long.")
 
 	def _set_token_hash(self):
 		"""Hash any newly-provided plaintext token. The plaintext is kept on the
