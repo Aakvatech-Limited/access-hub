@@ -94,9 +94,8 @@ Flow when an employee clicks **Request Access**:
    malformed → signature → pv → exp → aud → jti-replay), checking `aud ==
    SHA-256(local transport token)` and that the `jti` is unused (file-backed
    store). On success it:
-   - writes a **grant file** — authoritative for the reaper, the session guard,
-     and provisioning-outcome reports; records the **jti ↔ sid** mapping at
-     login,
+   - writes a **grant file** — authoritative for the reaper and the session
+     guard; records the **jti ↔ sid** mapping at login,
    - creates or reuses an ephemeral `User` (idempotent, keyed on email; see
      below),
    - assigns **all assignable roles on the target site** (every role Frappe's own
@@ -358,8 +357,8 @@ The hub's registry of client sites. Key modeling decisions:
   is a non-goal for now); there is no `enrollment_type` field.
 - **`transport_token_hash`** (read-only) stores only the SHA-256 — plaintext is
   shown once at creation/rotation and never persisted.
-- `port` (default 443), `protocol` (default https), `app_version` and
-  `last_announced_on` (set by the announce endpoint).
+- `port` (default 443), `protocol` (default https) — set at enrollment, never
+  updated by the guard (v2: a reliable self-reported announce/heartbeat).
 - **Permissions:** System Manager full; **Desk User** and **Agent** read-only.
 - With Helpdesk installed, a system-generated `customer` custom field (Link → HD
   Customer) links a client site to its helpdesk customer — see Install.

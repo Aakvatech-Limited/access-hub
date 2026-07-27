@@ -116,6 +116,5 @@ bench --site guard.localhost run-tests --app access_guard
 click **Request Access** on the hub → confirm the browser lands as an ephemeral
 System Manager on the guard, a grant file exists under
 `site/private/access_guard/grants/`, the monitoring notice shows, and a
-policy-denied op (e.g. creating a User) is blocked. Then confirm log push,
-announce, provisioning report, and policy pull round-trip over the transport
-channel.
+policy-denied op (e.g. creating a User) is blocked. Then confirm log push and
+policy pull round-trip over the transport channel.

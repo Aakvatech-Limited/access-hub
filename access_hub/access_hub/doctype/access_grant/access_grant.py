@@ -22,14 +22,13 @@ class AccessGrant(Document):
 	pass
 
 
-def create_and_mint(employee: str, remote_site: str) -> tuple["AccessGrant", str]:
-	"""Create an Access Grant row for `employee` (a User) against `remote_site`
-	(a Remote Site), mint its PASETO v4.public grant token per PROTOCOL §3, and
-	return (grant_doc, token).
+def create_and_mint(employee: str, site: "frappe.model.document.Document") -> tuple["AccessGrant", str]:
+	"""Create an Access Grant row for `employee` (a User) against `site` (a
+	Remote Site doc), mint its PASETO v4.public grant token per PROTOCOL §3,
+	and return (grant_doc, token).
 	"""
-	site = frappe.get_doc("Remote Site", remote_site)
 	if not site.transport_token_hash:
-		frappe.throw(f"Remote Site {remote_site!r} has no transport token hash set.")
+		frappe.throw(f"Remote Site {site.name!r} has no transport token hash set.")
 
 	jti = uuid.uuid4().hex
 	issued_at = now_datetime()
@@ -39,7 +38,7 @@ def create_and_mint(employee: str, remote_site: str) -> tuple["AccessGrant", str
 		{
 			"doctype": "Access Grant",
 			"employee": employee,
-			"remote_site": remote_site,
+			"remote_site": site.name,
 			"jti": jti,
 			"status": "Issued",
 			"issued_at": issued_at,
@@ -61,12 +60,6 @@ def create_and_mint(employee: str, remote_site: str) -> tuple["AccessGrant", str
 	}
 	token = sign_paseto(claims)
 	return grant, token
-
-
-def build_accept_url(remote_site: str, token: str) -> str:
-	site = frappe.get_doc("Remote Site", remote_site)
-	base = f"{site.protocol}://{site.host}:{site.port}"
-	return f"{base}/api/method/access_guard.api.accept?token={token}"
 
 
 def record_session_event(jti: str, event: str, reason: str | None = None) -> None:

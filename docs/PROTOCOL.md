@@ -111,8 +111,7 @@ Policy object keys (defaults live in `protocol.py::POLICY_DEFAULTS`):
 `mode ∈ {deny, warn}`; `actions ⊂ {create,write,delete,submit,cancel}`.
 **Delivery:** policy push on save + policy pull on the guard's hourly check-in are both
 unconditional (not configurable in v1), so `access_disabled`/`blacklisted_emails` always reach a
-client quickly. `log_sync_enabled` only gates the rest of that hourly check-in (log push, announce,
-retention).
+client quickly. `log_sync_enabled` only gates the rest of that hourly check-in (log push, retention).
 
 ## 5. Endpoints
 
@@ -127,10 +126,8 @@ The matched Remote Site (not any payload field) is what identifies the client to
 | method | payload | returns |
 |---|---|---|
 | `access_hub.api.get_policy` | — | `{ "policy_token": "<paseto>" }` |
-| `access_hub.api.push_logs` | `{ jti, host, log_kind: "request"\|"doc", session_meta, lines }` | `{ ok, received_lines }` |
+| `access_hub.api.push_logs` | `{ jti, log_kind: "request"\|"doc", lines }` | `{ ok, received_lines }` |
 | `access_hub.api.report_session_event` | `{ jti, event: "accepted"\|"login"\|"logout", reason }` | `{ ok }` |
-| `access_hub.api.announce` | `{ host, port, protocol, app_version, pv }` | `{ ok }` |
-| `access_hub.api.report_provisioning` | `{ jti, event: "created"\|"reaped", user, ts }` | `{ ok }` |
 
 `report_session_event` is called immediately (not batched with the hourly
 `push_logs`) — always on, no policy opt-out — so the hub's Access Grant reflects
@@ -147,7 +144,7 @@ All error responses use `AccessProtocolError.as_response()` →
 
 ## 6. Grant file (`site/private/access_guard/grants/<jti>.json`)
 
-Authoritative for the reaper, the session guard, and provisioning reports. Never in the DB.
+Authoritative for the reaper and the session guard. Never in the DB.
 
 ```json
 {

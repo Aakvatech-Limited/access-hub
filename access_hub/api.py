@@ -30,12 +30,10 @@ def request_access(remote_site: str):
 	Gated on the caller's own "read" permission for this Remote Site — the
 	site is only requestable if their role can see it (Desk User / Agent get
 	read-only). This never grants write, so it cannot rotate the token."""
-	from access_hub.access_hub.doctype.access_grant.access_grant import (
-		build_accept_url,
-		create_and_mint,
-	)
+	from access_hub.access_hub.doctype.access_grant.access_grant import create_and_mint
 
-	frappe.has_permission("Remote Site", "read", doc=remote_site, throw=True)
+	site = frappe.get_doc("Remote Site", remote_site)
+	site.check_permission("read")
 
 	employee = frappe.session.user
 	if employee in ("Administrator", "Guest"):
@@ -45,8 +43,8 @@ def request_access(remote_site: str):
 	if settings.is_blacklisted(employee):
 		frappe.throw("Access is currently disabled for this account.")
 
-	_grant, token = create_and_mint(employee, remote_site)
-	return {"redirect_url": build_accept_url(remote_site, token)}
+	_grant, token = create_and_mint(employee, site)
+	return {"redirect_url": site.build_accept_url(token)}
 
 
 @frappe.whitelist()
@@ -131,13 +129,9 @@ def get_policy(site):
 def push_logs(
 	site,
 	jti: str | None = None,
-	host: str | None = None,
 	log_kind: str = "request",
-	session_meta=None,
 	lines: str = "",
 ):
-	import json
-
 	from access_hub.access_hub.doctype.session_log_file.session_log_file import (
 		append_lines,
 		upsert_index,
@@ -148,21 +142,8 @@ def push_logs(
 	if log_kind not in ("request", "doc"):
 		frappe.throw("log_kind must be 'request' or 'doc'.")
 
-	if isinstance(session_meta, str):
-		try:
-			session_meta = json.loads(session_meta) if session_meta else {}
-		except ValueError:
-			session_meta = {}
-	session_meta = session_meta or {}
-
 	added = append_lines(site.name, jti, log_kind, lines or "")
-	upsert_index(
-		site.name,
-		jti,
-		log_kind=log_kind,
-		employee=session_meta.get("employee") or session_meta.get("emp_email"),
-		added_lines=added,
-	)
+	upsert_index(site.name, jti, log_kind=log_kind, added_lines=added)
 
 	return {"ok": True, "received_lines": added}
 
@@ -184,53 +165,16 @@ def report_session_event(site, jti: str | None = None, event: str | None = None,
 	return {"ok": True}
 
 
-@ingest_endpoint
-def announce(
-	site,
-	host: str | None = None,
-	port=None,
-	protocol: str | None = None,
-	app_version: str | None = None,
-	**kwargs,
-):
-	from access_hub.access_hub.doctype.remote_site.remote_site import announce as announce_upsert
-
-	announce_upsert(
-		site.name,
-		port=int(port) if port else None,
-		protocol=protocol,
-		app_version=app_version,
-	)
-	return {"ok": True}
-
-
-@ingest_endpoint
-def report_provisioning(
-	site, jti: str | None = None, event: str | None = None, user: str | None = None, ts: str | None = None
-):
-	frappe.get_doc(
-		{
-			"doctype": "Comment",
-			"comment_type": "Info",
-			"reference_doctype": "Remote Site",
-			"reference_name": site.name,
-			"content": f"Provisioning report: jti={jti} event={event} user={user} ts={ts}",
-		}
-	).insert(ignore_permissions=True)
-	return {"ok": True}
-
-
 @frappe.whitelist()
 def download_session_log(name: str):
 	"""Serve the full session log file (by Session Log File `name`, never a
 	client-supplied path) as a download. Gated on the Session Log File
 	doctype's own "read" permission (System Manager). Line-range viewing is
 	deferred to v2 — download-only for now."""
-	frappe.has_permission("Session Log File", "read", doc=name, throw=True)
-
-	from access_hub.access_hub.doctype.session_log_file.session_log_file import path_for
+	from access_hub.access_hub.doctype.session_log_file.session_log_file import SUFFIX_BY_KIND, path_for
 
 	doc = frappe.get_doc("Session Log File", name)
+	doc.check_permission("read")
 	path = path_for(doc.remote_site, doc.jti, doc.log_kind)
 
 	if not os.path.exists(path):
@@ -239,7 +183,7 @@ def download_session_log(name: str):
 	with open(path, "rb") as f:
 		content = f.read()
 
-	suffix = ".doc.log" if doc.log_kind == "doc" else ".log"
+	suffix = SUFFIX_BY_KIND[doc.log_kind]
 	frappe.local.response.filename = f"{doc.jti}{suffix}"
 	frappe.local.response.filecontent = content
 	frappe.local.response.type = "download"

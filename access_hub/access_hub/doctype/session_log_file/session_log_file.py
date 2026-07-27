@@ -6,7 +6,7 @@ import os
 import frappe
 from frappe.model.document import Document
 
-_SUFFIX_BY_KIND = {"request": ".log", "doc": ".doc.log"}
+SUFFIX_BY_KIND = {"request": ".log", "doc": ".doc.log"}
 
 
 class SessionLogFile(Document):
@@ -30,21 +30,21 @@ def _safe_join(base: str, *parts: str) -> str:
 	return candidate
 
 
-def path_for(host: str, jti: str, log_kind: str = "request") -> str:
+def path_for(remote_site: str, jti: str, log_kind: str = "request") -> str:
 	"""Canonical on-disk path for a session's log file of the given kind,
-	base/<host>/<jti><suffix> — request: .log, doc: .doc.log. `host` and
-	`jti` are never taken as full paths — only ever joined as single path
-	segments, so `../` in either cannot escape base_dir."""
+	base/<remote_site>/<jti><suffix> — request: .log, doc: .doc.log.
+	`remote_site` and `jti` are never taken as full paths — only ever joined
+	as single path segments, so `../` in either cannot escape base_dir."""
 	base = base_dir()
-	host_component = os.path.basename(host)
-	jti_component = os.path.basename(jti) + _SUFFIX_BY_KIND[log_kind]
-	return _safe_join(base, host_component, jti_component)
+	site_component = os.path.basename(remote_site)
+	jti_component = os.path.basename(jti) + SUFFIX_BY_KIND[log_kind]
+	return _safe_join(base, site_component, jti_component)
 
 
-def append_lines(host: str, jti: str, log_kind: str, lines_text: str) -> int:
+def append_lines(remote_site: str, jti: str, log_kind: str, lines_text: str) -> int:
 	"""Append `lines_text` (one or more newline-separated log lines) to the
-	file for (host, jti, log_kind). Returns the number of lines appended."""
-	path = path_for(host, jti, log_kind)
+	file for (remote_site, jti, log_kind). Returns the number of lines appended."""
+	path = path_for(remote_site, jti, log_kind)
 	os.makedirs(os.path.dirname(path), exist_ok=True)
 
 	lines = [line for line in lines_text.splitlines() if line.strip()]
@@ -59,11 +59,11 @@ def append_lines(host: str, jti: str, log_kind: str, lines_text: str) -> int:
 	return len(lines)
 
 
-def upsert_index(
-	remote_site: str, jti: str, log_kind: str = "request", employee: str | None = None, added_lines: int = 0
-):
+def upsert_index(remote_site: str, jti: str, log_kind: str = "request", added_lines: int = 0):
 	"""One row per (jti, log_kind) — a session's request log and doc-change
-	log are tracked (and downloadable) independently."""
+	log are tracked (and downloadable) independently. employee is read from
+	the matching Access Grant (the hub's own record), not sent by the guard -
+	jti is already the key needed to look it up."""
 	base = base_dir()
 	path = path_for(remote_site, jti, log_kind)
 	rel_path = os.path.relpath(path, base)
@@ -74,9 +74,6 @@ def upsert_index(
 		doc = frappe.get_doc("Session Log File", filters)
 		doc.size_bytes = size_bytes
 		doc.line_count = (doc.line_count or 0) + added_lines
-		if employee and not doc.employee:
-			doc.employee = employee
-		doc.save(ignore_permissions=True)
 	else:
 		doc = frappe.get_doc(
 			{
@@ -84,12 +81,14 @@ def upsert_index(
 				"remote_site": remote_site,
 				"jti": jti,
 				"log_kind": log_kind,
-				"employee": employee,
 				"date": frappe.utils.today(),
 				"path": rel_path,
 				"size_bytes": size_bytes,
 				"line_count": added_lines,
 			}
 		)
-		doc.insert(ignore_permissions=True)
+
+	if not doc.employee:
+		doc.employee = frappe.db.get_value("Access Grant", jti, "emp_email")
+	doc.save(ignore_permissions=True)
 	return doc

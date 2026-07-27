@@ -55,14 +55,6 @@ class AccessHubSettings(Document):
 				},
 			)
 
-	def validate(self):
-		self._validate_rules()
-
-	def _validate_rules(self):
-		for row in self.rules:
-			if not row.document_type:
-				frappe.throw("Each rule row needs a Document Type.")
-
 	def on_update(self):
 		self.republish_policy()
 
@@ -118,16 +110,15 @@ class AccessHubSettings(Document):
 		}
 
 	def is_blacklisted(self, employee: str) -> bool:
-		"""`employee` is a User name (e.g. frappe.session.user), not necessarily
-		its email - resolve before comparing against email-keyed blacklists."""
+		"""`employee` is a User name (e.g. frappe.session.user) - blacklisted_users.user
+		is also a User name (a Link), so this is a direct comparison, no email
+		resolution needed (contrast as_policy_dict's POLICY_BLACKLISTED_EMAILS,
+		which is the wire protocol's email-keyed shape for the guard)."""
 		if bool(self.access_disabled):
 			return True
-		user = frappe.db.get_value("User", employee, ["email", "enabled"], as_dict=True)
-		if not user:
+		if employee in {row.user for row in self.blacklisted_users if row.user}:
 			return True
-		if user.email and user.email in blacklisted_user_emails(self):
-			return True
-		return not bool(user.enabled)
+		return not bool(frappe.db.get_value("User", employee, "enabled"))
 
 	def build_and_sign_policy_token(self) -> str:
 		policy = self.as_policy_dict()
@@ -159,12 +150,15 @@ def disabled_granted_user_emails() -> set[str]:
 	correct even if User.name stops being the email (e.g. a future UUID
 	naming scheme). Derived live, not stored - re-enabling the User clears
 	it automatically."""
-	granted = frappe.get_all("Access Grant", filters={"emp_email": ["is", "set"]}, pluck="emp_email")
+	granted = frappe.get_all(
+		"Access Grant", filters={"emp_email": ["is", "set"]}, pluck="emp_email", distinct=True
+	)
 	if not granted:
 		return set()
-	granted = set(granted)
-	enabled = frappe.get_all("User", filters={"email": ["in", list(granted)], "enabled": 1}, pluck="email")
-	return granted - set(enabled)
+	# email has no index, so filtering "email in granted" wouldn't use one
+	# anyway - just fetch every enabled email once.
+	enabled = frappe.get_all("User", filters={"enabled": 1}, pluck="email")
+	return set(granted) - set(enabled)
 
 
 @frappe.whitelist()
@@ -200,7 +194,7 @@ def push_policy_to_all_sites(token: str):
 		try:
 			requests.post(url, json={"policy_token": token}, timeout=30)
 		except Exception:
-			frappe.logger("access_hub").info(f"policy push to {site.name} failed (best-effort, ignored)")
+			frappe.log_error(title=f"access_hub: policy push to {site.name} failed")
 
 
 def seed_default_policy():

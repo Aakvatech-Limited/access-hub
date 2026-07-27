@@ -43,6 +43,10 @@ class RemoteSite(Document):
 		self.transport_token_hash = transport_token_hash(plaintext)
 		self.flags.new_token_plaintext = plaintext
 
+	def build_accept_url(self, token: str) -> str:
+		base = f"{self.protocol}://{self.host}:{self.port}"
+		return f"{base}/api/method/access_guard.api.accept?token={token}"
+
 	def get_enrollment_config(self, plaintext_token: str | None = None) -> dict:
 		"""The guard-side config an operator copies to enroll this site: hub URL,
 		public key, and the one-time transport token (present only when freshly
@@ -68,28 +72,3 @@ def rotate_transport_token(remote_site: str, token: str | None = None) -> dict:
 	doc._apply_token(plaintext)
 	doc.save()
 	return doc.get_enrollment_config(plaintext)
-
-
-def announce(
-	remote_site: str, port: int | None = None, protocol: str | None = None, app_version: str | None = None
-):
-	"""Update a Remote Site's announce metadata.
-
-	Called by the ingest endpoint with the Remote Site name matched by transport
-	-token auth (not the payload host — host is now just a mutable title field,
-	no longer the doc name). Updates port/protocol/app_version/last_announced_on
-	only, never the token/hash.
-	"""
-	if not frappe.db.exists("Remote Site", remote_site):
-		frappe.throw(f"Unknown Remote Site: {remote_site}")
-
-	doc = frappe.get_doc("Remote Site", remote_site)
-	if port:
-		doc.port = port
-	if protocol:
-		doc.protocol = protocol
-	if app_version:
-		doc.app_version = app_version
-	doc.last_announced_on = frappe.utils.now_datetime()
-	doc.save(ignore_permissions=True)
-	return doc

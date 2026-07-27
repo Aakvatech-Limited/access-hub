@@ -9,9 +9,6 @@
   "port",
   "protocol",
   "is_fc_site",
-  "column_break_status",
-  "app_version",
-  "last_announced_on",
   "transport_token_hash"
  ],
  "fields": [
@@ -53,27 +50,8 @@
    "hidden": 1,
    "label": "Transport Token Hash",
    "no_copy": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_status",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "app_version",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Guard App Version",
-   "no_copy": 1,
-   "read_only": 1
-  },
-  {
-   "fieldname": "last_announced_on",
-   "fieldtype": "Datetime",
-   "hidden": 1,
-   "label": "Last Announced On",
-   "no_copy": 1,
-   "read_only": 1
+   "read_only": 1,
+   "unique": 1
   }
  ],
  "links": [],

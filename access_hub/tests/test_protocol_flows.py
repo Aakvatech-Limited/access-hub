@@ -9,10 +9,7 @@ import pyseto
 from frappe.tests.utils import FrappeTestCase
 from pyseto import Key
 
-from access_hub.access_hub.doctype.access_grant.access_grant import (
-	build_accept_url,
-	create_and_mint,
-)
+from access_hub.access_hub.doctype.access_grant.access_grant import create_and_mint
 from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
 	get_current_policy_token,
 	push_policy_to_all_sites,
@@ -109,16 +106,16 @@ class HubTestCase(FrappeTestCase):
 		frappe.delete_doc("User", email, ignore_permissions=True, force=True)
 		frappe.db.commit()
 
-	def register_log_file_cleanup(self, host, jti):
+	def register_log_file_cleanup(self, remote_site, jti):
 		"""append_lines() writes real files under base_dir() - no DB rollback
 		touches those. Delete both on-disk files (request + doc kind), plus
 		any Session Log File rows a real ingest call may have committed."""
-		self.addCleanup(self._delete_log_artifacts, host, jti)
+		self.addCleanup(self._delete_log_artifacts, remote_site, jti)
 
 	@staticmethod
-	def _delete_log_artifacts(host, jti):
+	def _delete_log_artifacts(remote_site, jti):
 		for log_kind in ("request", "doc"):
-			p = path_for(host, jti, log_kind)
+			p = path_for(remote_site, jti, log_kind)
 			if os.path.exists(p):
 				os.remove(p)
 		frappe.db.delete("Session Log File", {"jti": jti})
@@ -132,7 +129,7 @@ class TestKeypairAndGrantMinting(HubTestCase):
 		site = self.make_remote_site("test-grant-site.localhost")
 		user = self.make_user("grant-employee@example.com")
 
-		grant, token = create_and_mint(user.name, site.name)
+		grant, token = create_and_mint(user.name, site)
 
 		self.assertEqual(grant.status, "Issued")
 		self.assertTrue(grant.jti)
@@ -149,14 +146,14 @@ class TestKeypairAndGrantMinting(HubTestCase):
 		site.reload()
 		self.assertEqual(claims["aud"], site.transport_token_hash)
 
-		url = build_accept_url(site.name, token)
+		url = site.build_accept_url(token)
 		self.assertIn(token, url)
 		self.assertIn("access_guard.api.accept", url)
 
 	def test_grant_token_tamper_fails_verification(self):
 		site = self.make_remote_site("test-tamper-site.localhost")
 		user = self.make_user("tamper-employee@example.com")
-		_grant, token = create_and_mint(user.name, site.name)
+		_grant, token = create_and_mint(user.name, site)
 
 		tampered = token[:-4] + ("A" * 4 if not token.endswith("AAAA") else "BBBB")
 		pub = get_public_key()
@@ -169,7 +166,7 @@ class TestKeypairAndGrantMinting(HubTestCase):
 		direct frappe.get_doc("Access Grant", jti), no filter needed."""
 		site = self.make_remote_site("test-autoname-site.localhost")
 		user = self.make_user("autoname-employee@example.com")
-		grant, _token = create_and_mint(user.name, site.name)
+		grant, _token = create_and_mint(user.name, site)
 		self.assertEqual(grant.name, grant.jti)
 
 
@@ -182,7 +179,7 @@ class TestSessionLifecycleEvents(HubTestCase):
 		super().setUp()
 		self.site = self.make_remote_site(f"test-session-event-{self._testMethodName}.localhost")
 		self.user = self.make_user(f"session-event-{self._testMethodName}@example.com")
-		self.grant, _token = create_and_mint(self.user.name, self.site.name)
+		self.grant, _token = create_and_mint(self.user.name, self.site)
 
 	def test_accepted_and_login_set_active_and_start_time(self):
 		from access_hub.access_hub.doctype.access_grant.access_grant import record_session_event
@@ -306,7 +303,7 @@ class TestDisabledAndDeletedUserEviction(HubTestCase):
 
 		site = self.make_remote_site(f"test-evict-{self._testMethodName}.localhost")
 		user = self.make_user(f"evict-disable-{self._testMethodName}@example.com", first_name="Evictee")
-		create_and_mint(user.name, site.name)
+		create_and_mint(user.name, site)
 		self.addCleanup(frappe.db.delete, "Access Grant", {"employee": user.name})
 
 		self.assertNotIn(user.name, disabled_granted_user_emails())
@@ -333,7 +330,7 @@ class TestDisabledAndDeletedUserEviction(HubTestCase):
 		site = self.make_remote_site(f"test-evict-del-{self._testMethodName}.localhost")
 		email = f"evict-delete-{self._testMethodName}@example.com"
 		user = self.make_user(email, first_name="Evictee")
-		create_and_mint(user.name, site.name)
+		create_and_mint(user.name, site)
 		self.addCleanup(frappe.db.delete, "Access Grant", {"emp_email": email})
 
 		# force=True: mirrors a real delete of a User with linked grants.
@@ -483,7 +480,7 @@ class TestLogServing(HubTestCase):
 		jti = f"test-log-dl-{self._testMethodName}-jti"
 		self.register_log_file_cleanup(self.site.name, jti)
 		append_lines(self.site.name, jti, "request", "ts=1 path=x\nts=2 path=y")
-		doc = upsert_index(self.site.name, jti, log_kind="request", employee="x@example.com", added_lines=2)
+		doc = upsert_index(self.site.name, jti, log_kind="request", added_lines=2)
 
 		frappe.set_user("Administrator")
 		download_session_log(name=doc.name)
@@ -498,7 +495,7 @@ class TestLogServing(HubTestCase):
 		jti = f"test-log-dl-doc-{self._testMethodName}-jti"
 		self.register_log_file_cleanup(self.site.name, jti)
 		append_lines(self.site.name, jti, "doc", "ts=1 event=write doctype=User")
-		doc = upsert_index(self.site.name, jti, log_kind="doc", employee="x@example.com", added_lines=1)
+		doc = upsert_index(self.site.name, jti, log_kind="doc", added_lines=1)
 
 		frappe.set_user("Administrator")
 		download_session_log(name=doc.name)
@@ -697,31 +694,10 @@ class TestIngestEndpointsOverRealHttp(HubTestCase):
 		self.assertIn("policy_token", resp.get_data(as_text=True))
 
 	def test_push_logs_over_http_with_typed_params(self):
-		body = (
-			b'{"pv":1,"jti":"'
-			+ self.jti.encode()
-			+ b'","host":"'
-			+ self.host.encode()
-			+ b'","log_kind":"request","session_meta":{"emp_email":"x@example.com"},'
-			+ b'"lines":"ts=1 path=x"}'
-		)
+		body = b'{"pv":1,"jti":"' + self.jti.encode() + b'","log_kind":"request","lines":"ts=1 path=x"}'
 		resp = self._post("access_hub.api.push_logs", body, token=self.plaintext_token)
 		self.assertEqual(resp.status_code, 200)
 		self.assertIn("received_lines", resp.get_data(as_text=True))
-
-	def test_announce_over_http_with_typed_params(self):
-		body = b'{"pv":1,"port":8005,"protocol":"https","app_version":"0.1.0"}'
-		resp = self._post("access_hub.api.announce", body, token=self.plaintext_token)
-		self.assertEqual(resp.status_code, 200)
-
-	def test_report_provisioning_over_http_with_typed_params(self):
-		body = (
-			b'{"pv":1,"jti":"'
-			+ self.jti.encode()
-			+ b'","event":"created","user":"x@example.com","ts":"2026-01-01T00:00:00"}'
-		)
-		resp = self._post("access_hub.api.report_provisioning", body, token=self.plaintext_token)
-		self.assertEqual(resp.status_code, 200)
 
 	def test_report_session_event_over_http_with_typed_params(self):
 		body = b'{"pv":1,"jti":"' + self.jti.encode() + b'","event":"logout","reason":"user_logout"}'
