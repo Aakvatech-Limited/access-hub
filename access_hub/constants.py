@@ -9,11 +9,18 @@ CONF_HUB_PUBLIC_KEY_LOCAL = "access_hub_public_key"  # paserk k4.public — hub'
 
 # --- Grant token minting -----------------------------------------------------
 # aud = transport_token_hash(client transport token); exp = iat + GRANT_TTL.
-GRANT_TTL_SECONDS_DEFAULT = 45 * 60  # 30-60 min band; URL redemption deadline, NOT session length
+GRANT_TTL_SECONDS_DEFAULT = 120  # URL redemption deadline, NOT session length - browser redirects immediately
 
 # --- Policy token minting -----------------------------------------------------
-# Rebuilt + re-signed on every Access Hub Settings save and pulled hourly by
-# every guard, so this only bites an already-unreachable guard.
-POLICY_TOKEN_TTL_DAYS = 30
+# exp exists only because verify_and_decode() requires it on every token,
+# uniformly - not because a policy token needs its own staleness window (it's
+# re-signed on every cache miss, see get_current_policy_token). A few days
+# comfortably outlasts POLICY_TOKEN_CACHE_TTL_SECONDS so a cached token is
+# never expired.
+POLICY_TOKEN_TTL_DAYS = 3
+# A Settings save busts this immediately (republish_policy) regardless of TTL;
+# the TTL only bounds staleness for anything that skips that path.
+POLICY_TOKEN_CACHE_TTL_SECONDS = 24 * 60 * 60
+POLICY_TOKEN_CACHE_KEY = "access_hub_current_policy_token"
 
 TRANSPORT_TOKEN_MIN_LEN = 8

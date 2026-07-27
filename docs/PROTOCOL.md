@@ -61,7 +61,7 @@ PASETO `v4.public`, signed with the hub private key. Claims:
 | `emp_email` | employee email | custom; becomes the ephemeral user id |
 | `aud` | `transport_token_hash(client token)` | registered; verified on accept |
 | `iat` | now | registered (ISO-8601) |
-| `exp` | `iat + ~45m` | registered; **URL redemption deadline**, not session length |
+| `exp` | `iat + ~2m` | registered; **URL redemption deadline**, not session length |
 | `jti` | uuid4 hex | custom; single-use |
 | `pv` | `1` | custom |
 

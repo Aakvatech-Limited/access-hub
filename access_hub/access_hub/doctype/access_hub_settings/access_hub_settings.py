@@ -5,7 +5,12 @@ import frappe
 from frappe.desk.search import search_link
 from frappe.model.document import Document
 
-from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL, POLICY_TOKEN_TTL_DAYS
+from access_hub.constants import (
+	CONF_HUB_PUBLIC_KEY_LOCAL,
+	POLICY_TOKEN_CACHE_KEY,
+	POLICY_TOKEN_CACHE_TTL_SECONDS,
+	POLICY_TOKEN_TTL_DAYS,
+)
 from access_hub.protocol import (
 	GUARD_CONF_HUB_PUBLIC_KEY,
 	GUARD_CONF_HUB_URL,
@@ -67,13 +72,13 @@ class AccessHubSettings(Document):
 		(e.g. user_events on User disable/delete) without depending on
 		on_update's other side effects."""
 		# Before the keypair exists (e.g. right after install seeds defaults) we
-		# can't sign yet. Leave the token empty; get_current_policy_token() builds
-		# it lazily on first fetch, once `bench access-hub-generate-keypair` has run.
+		# can't sign yet. get_current_policy_token() builds it lazily on first
+		# fetch instead, once `bench access-hub-generate-keypair` has run.
 		try:
 			token = self.build_and_sign_policy_token()
 		except ClientNotConfiguredError:
 			return
-		frappe.db.set_value(self.doctype, self.name, "current_policy_token", token, update_modified=False)
+		frappe.cache.set_value(POLICY_TOKEN_CACHE_KEY, token, expires_in_sec=POLICY_TOKEN_CACHE_TTL_SECONDS)
 		# Not configurable in v1 - always best-effort (backstopped by the
 		# guard's unconditional hourly pull). Enqueued after commit so a
 		# rolled-back save can never push a policy that was never saved.
@@ -109,17 +114,20 @@ class AccessHubSettings(Document):
 			POLICY_NAME_SUFFIX: self.name_suffix or POLICY_DEFAULTS[POLICY_NAME_SUFFIX],
 			POLICY_ACCESS_DISABLED: bool(self.access_disabled),
 			# Unioned with disabled_granted_user_emails() (self-correcting, no cleanup needed).
-			POLICY_BLACKLISTED_EMAILS: list(
-				{row.user for row in self.blacklisted_users if row.user} | disabled_granted_user_emails()
-			),
+			POLICY_BLACKLISTED_EMAILS: list(blacklisted_user_emails(self) | disabled_granted_user_emails()),
 		}
 
 	def is_blacklisted(self, employee: str) -> bool:
+		"""`employee` is a User name (e.g. frappe.session.user), not necessarily
+		its email - resolve before comparing against email-keyed blacklists."""
 		if bool(self.access_disabled):
 			return True
-		if employee in {row.user for row in self.blacklisted_users if row.user}:
+		user = frappe.db.get_value("User", employee, ["email", "enabled"], as_dict=True)
+		if not user:
 			return True
-		return not bool(frappe.db.get_value("User", employee, "enabled"))
+		if user.email and user.email in blacklisted_user_emails(self):
+			return True
+		return not bool(user.enabled)
 
 	def build_and_sign_policy_token(self) -> str:
 		policy = self.as_policy_dict()
@@ -135,19 +143,28 @@ class AccessHubSettings(Document):
 		return sign_paseto(claims)
 
 
+def blacklisted_user_emails(settings: "AccessHubSettings") -> set[str]:
+	"""Emails of admin-blacklisted Users. blacklisted_users.user is a Link to
+	User (its name), not necessarily its email - resolve rather than assume."""
+	names = {row.user for row in settings.blacklisted_users if row.user}
+	if not names:
+		return set()
+	rows = frappe.get_all("User", filters={"name": ["in", list(names)]}, pluck="email")
+	return {email for email in rows if email}
+
+
 def disabled_granted_user_emails() -> set[str]:
-	"""Emails ever granted access whose User is now disabled or gone.
-	Derived live, not stored - re-enabling the User clears it automatically."""
-	rows = frappe.db.sql(
-		"""
-		select distinct g.emp_email as emp_email
-		from `tabAccess Grant` g
-		left join `tabUser` u on u.name = g.employee and u.enabled = 1
-		where g.emp_email is not null and u.name is null
-		""",
-		as_dict=True,
-	)
-	return {row.emp_email for row in rows}
+	"""Emails ever granted access, minus emails of currently-enabled Users.
+	All in email-space (g.emp_email is a snapshot, not a Link) so this stays
+	correct even if User.name stops being the email (e.g. a future UUID
+	naming scheme). Derived live, not stored - re-enabling the User clears
+	it automatically."""
+	granted = frappe.get_all("Access Grant", filters={"emp_email": ["is", "set"]}, pluck="emp_email")
+	if not granted:
+		return set()
+	granted = set(granted)
+	enabled = frappe.get_all("User", filters={"email": ["in", list(granted)], "enabled": 1}, pluck="email")
+	return granted - set(enabled)
 
 
 @frappe.whitelist()
@@ -160,15 +177,15 @@ def doctype_autocomplete(txt: str | None = None) -> list:
 
 
 def get_current_policy_token() -> str:
-	"""Return the current signed policy token, (re)building it if missing."""
-	settings = frappe.get_single("Access Hub Settings")
-	token = frappe.db.get_single_value("Access Hub Settings", "current_policy_token")
+	"""Return a signed policy token, cached for POLICY_TOKEN_CACHE_TTL_SECONDS so
+	the hourly pull from every guard doesn't re-sign on each request. A Settings
+	save busts this immediately (see republish_policy) - the cache TTL only
+	bounds the delay for anything that skips that path (e.g. install seeding)."""
+	token = frappe.cache.get_value(POLICY_TOKEN_CACHE_KEY)
 	if token:
 		return token
-	token = settings.build_and_sign_policy_token()
-	frappe.db.set_value(
-		"Access Hub Settings", settings.name, "current_policy_token", token, update_modified=False
-	)
+	token = frappe.get_single("Access Hub Settings").build_and_sign_policy_token()
+	frappe.cache.set_value(POLICY_TOKEN_CACHE_KEY, token, expires_in_sec=POLICY_TOKEN_CACHE_TTL_SECONDS)
 	return token
 
 

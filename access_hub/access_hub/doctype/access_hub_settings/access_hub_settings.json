@@ -20,7 +20,6 @@
   "log_sync_enabled",
   "push_grace_days",
   "retention_days",
-  "current_policy_token",
   "enrollment_section",
   "hub_enrollment_info"
  ],
@@ -132,13 +131,6 @@
    "fieldtype": "Table",
    "label": "Always-Log Doctypes",
    "options": "Always Log Doctype"
-  },
-  {
-   "fieldname": "current_policy_token",
-   "fieldtype": "Long Text",
-   "hidden": 1,
-   "label": "Current Policy Token",
-   "read_only": 1
   },
   {
    "fieldname": "enrollment_section",

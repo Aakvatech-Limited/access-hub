@@ -38,7 +38,8 @@
    "read_only": 1
   },
   {
-   "description": "Snapshotted at mint time (not fetch_from) so it survives the linked User being deleted later — used to keep evicting a removed user even after their User record is gone.",
+   "description": "fetch_from only runs when Employee itself changes, so this stays put even after the linked User is deleted later — used to keep evicting a removed user even after their User record is gone.",
+   "fetch_from": "employee.email",
    "fieldname": "emp_email",
    "fieldtype": "Data",
    "hidden": 1,

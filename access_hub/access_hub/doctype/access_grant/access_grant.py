@@ -31,8 +31,6 @@ def create_and_mint(employee: str, remote_site: str) -> tuple["AccessGrant", str
 	if not site.transport_token_hash:
 		frappe.throw(f"Remote Site {remote_site!r} has no transport token hash set.")
 
-	user = frappe.get_doc("User", employee)
-
 	jti = uuid.uuid4().hex
 	issued_at = now_datetime()
 	expires_at = add_to_date(issued_at, seconds=GRANT_TTL_SECONDS_DEFAULT)
@@ -41,9 +39,6 @@ def create_and_mint(employee: str, remote_site: str) -> tuple["AccessGrant", str
 		{
 			"doctype": "Access Grant",
 			"employee": employee,
-			# Snapshotted, not fetch_from: must survive `employee`'s User being
-			# deleted later (see Access Grant.emp_email description).
-			"emp_email": user.email or user.name,
 			"remote_site": remote_site,
 			"jti": jti,
 			"status": "Issued",
@@ -51,11 +46,13 @@ def create_and_mint(employee: str, remote_site: str) -> tuple["AccessGrant", str
 			"expires_at": expires_at,
 		}
 	)
+	# employee_name/emp_email are fetch_from - insert() populates them from the
+	# linked User, no separate lookup needed here.
 	grant.insert(ignore_permissions=True)
 
 	claims = {
-		CLAIM_EMP_NAME: user.full_name,
-		CLAIM_EMP_EMAIL: user.email or user.name,
+		CLAIM_EMP_NAME: grant.employee_name,
+		CLAIM_EMP_EMAIL: grant.emp_email,
 		"aud": site.transport_token_hash,
 		CLAIM_JTI: jti,
 		CLAIM_PV: PV,

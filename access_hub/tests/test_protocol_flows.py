@@ -22,7 +22,7 @@ from access_hub.access_hub.doctype.session_log_file.session_log_file import (
 	base_dir,
 	path_for,
 )
-from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL, TRANSPORT_TOKEN_MIN_LEN
+from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL, POLICY_TOKEN_CACHE_KEY, TRANSPORT_TOKEN_MIN_LEN
 from access_hub.protocol import (
 	POLICY_DEFAULTS,
 	POLICY_RULES,
@@ -55,7 +55,14 @@ class HubTestCase(FrappeTestCase):
 	Register cleanup with `self.addCleanup(...)` right where each fixture is
 	created (LIFO per-test, not a single tearDown that has to separately
 	track every test method's fixtures).
+
+	Same reasoning applies to redis: get_current_policy_token() caches the
+	signed token there, and DB rollback doesn't touch it - clear it up front so
+	no test can read a token signed against a since-rolled-back state.
 	"""
+
+	def setUp(self):
+		frappe.cache.delete_value(POLICY_TOKEN_CACHE_KEY)
 
 	def make_remote_site(self, host, transport_token=None, **fields):
 		site = frappe.get_doc(
@@ -172,6 +179,7 @@ class TestSessionLifecycleEvents(HubTestCase):
 	guard (not batched with the hourly activity-log sync)."""
 
 	def setUp(self):
+		super().setUp()
 		self.site = self.make_remote_site(f"test-session-event-{self._testMethodName}.localhost")
 		self.user = self.make_user(f"session-event-{self._testMethodName}@example.com")
 		self.grant, _token = create_and_mint(self.user.name, self.site.name)
@@ -363,6 +371,33 @@ class TestDisabledAndDeletedUserEviction(HubTestCase):
 			any(c.args and c.args[0] is push_policy_to_all_sites for c in mock_enqueue.call_args_list)
 		)
 
+	def test_user_reenable_triggers_policy_republish(self):
+		from unittest.mock import patch
+
+		user = self.make_user(
+			f"evict-push-reenable-{self._testMethodName}@example.com", first_name="PushTest"
+		)
+		user.enabled = 0
+		user.save(ignore_permissions=True)
+
+		with patch("frappe.enqueue") as mock_enqueue:
+			user.enabled = 1
+			user.save(ignore_permissions=True)
+
+		self.assertTrue(
+			any(c.args and c.args[0] is push_policy_to_all_sites for c in mock_enqueue.call_args_list)
+		)
+
+	def test_new_user_creation_triggers_policy_republish(self):
+		from unittest.mock import patch
+
+		with patch("frappe.enqueue") as mock_enqueue:
+			self.make_user(f"evict-push-new-{self._testMethodName}@example.com", first_name="PushTest")
+
+		self.assertTrue(
+			any(c.args and c.args[0] is push_policy_to_all_sites for c in mock_enqueue.call_args_list)
+		)
+
 
 class TestRemoteSite(HubTestCase):
 	def test_transport_token_hash_set_on_validate(self):
@@ -387,6 +422,7 @@ class TestRemoteSite(HubTestCase):
 
 class TestIngestAuth(HubTestCase):
 	def setUp(self):
+		super().setUp()
 		self.plaintext_token = "super-secret-transport-token-123"
 		host = f"test-ingest-{self._testMethodName}.localhost"
 		self.site = self.make_remote_site(host, transport_token=self.plaintext_token)
@@ -436,6 +472,7 @@ class TestIngestAuth(HubTestCase):
 
 class TestLogServing(HubTestCase):
 	def setUp(self):
+		super().setUp()
 		host = f"test-logserve-{self._testMethodName}.localhost"
 		self.site = self.make_remote_site(host)
 
@@ -508,6 +545,7 @@ class TestRequestAccessAttribution(HubTestCase):
 	full-attribution posture)."""
 
 	def setUp(self):
+		super().setUp()
 		self.site = self.make_remote_site(f"test-reqacc-{self._testMethodName}.localhost")
 		self.caller_email = f"caller-{self._testMethodName}@example.com"
 		caller = self.make_user(self.caller_email, first_name="Caller")
@@ -542,6 +580,7 @@ class TestAccessDisabledAndBlacklist(HubTestCase):
 	request_access outright, not just fail silently downstream."""
 
 	def setUp(self):
+		super().setUp()
 		self.site = self.make_remote_site(f"test-blacklist-{self._testMethodName}.localhost")
 		self.caller_email = f"blockable-{self._testMethodName}@example.com"
 		caller = self.make_user(self.caller_email, first_name="Blockable")
@@ -629,6 +668,7 @@ class TestIngestEndpointsOverRealHttp(HubTestCase):
 	"""
 
 	def setUp(self):
+		super().setUp()
 		self.plaintext_token = "http-regression-transport-token-1"
 		self.host = f"test-http-{self._testMethodName}.localhost"
 		self.jti = f"http-test-{self._testMethodName}-jti"
