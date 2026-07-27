@@ -39,7 +39,7 @@ def generate_keypair(ctx, force, site):
 		if frappe.conf.get(CONF_HUB_PRIVATE_KEY) and not force:
 			click.secho(
 				f"{CONF_HUB_PRIVATE_KEY} already set in site_config.json. "
-				"Refusing to overwrite. Pass --force to regenerate. ",
+				"Refusing to overwrite. Pass --force to regenerate.",
 				fg="red",
 			)
 			raise click.exceptions.Exit(1)
