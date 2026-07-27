@@ -42,7 +42,6 @@
   },
   {
    "default": "0",
-   "description": "Site is managed via Frappe Cloud",
    "fieldname": "is_fc_site",
    "fieldtype": "Check",
    "label": "Is FC Site"

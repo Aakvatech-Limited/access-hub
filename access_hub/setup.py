@@ -75,7 +75,7 @@ def _sync_helpdesk_customer_field():
 			"label": "Helpdesk Customer",
 			"fieldtype": "Link",
 			"options": "HD Customer",
-			"insert_after": "protocol",
+			"insert_after": "column_break_status",
 			"in_list_view": 1,
 		},
 	)
