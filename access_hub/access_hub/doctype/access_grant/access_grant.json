@@ -5,13 +5,13 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "status",
   "employee",
   "employee_name",
   "emp_email",
   "remote_site",
   "jti",
-  "status_col_break",
-  "status",
+  "col_break_1",
   "issued_at",
   "expires_at",
   "session_section",
@@ -63,7 +63,7 @@
    "unique": 1
   },
   {
-   "fieldname": "status_col_break",
+   "fieldname": "col_break_1",
    "fieldtype": "Column Break"
   },
   {
