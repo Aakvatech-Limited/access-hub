@@ -72,12 +72,11 @@ def _sync_helpdesk_customer_field():
 		"Remote Site",
 		{
 			"fieldname": "customer",
-			"label": "Customer",
+			"label": "Helpdesk Customer",
 			"fieldtype": "Link",
 			"options": "HD Customer",
 			"insert_after": "protocol",
 			"in_list_view": 1,
-			"description": "Optional link to the Helpdesk customer for this client site.",
 		},
 	)
 

@@ -3,7 +3,9 @@
 
 frappe.ui.form.on("Remote Site", {
 	refresh(frm) {
-		// Token freshly generated on the save just completed — show it once.
+		// A token applied during the just-completed save (create autogen) arrives
+		// in frm.doc.__onload (set by the controller's onload, serialized into the
+		// save response). Show the copy dialog once, then clear it.
 		const config = frm.doc.__onload && frm.doc.__onload.transport_token_config;
 		if (config) {
 			show_config_dialog(frm, config);
@@ -16,21 +18,19 @@ frappe.ui.form.on("Remote Site", {
 
 		// Any user who can see this site (Desk User / Agent get read-only) can
 		// request access for themselves — mints a grant attributed to them.
-		frm.add_custom_button(__("Request Access"))
-			.addClass("btn-primary")
-			.on("click", () => {
-				frappe.call({
-					method: "access_hub.api.request_access",
-					args: { remote_site: frm.doc.name },
-					freeze: true,
-					freeze_message: __("Requesting access..."),
-					callback: (r) => {
-						if (r.message && r.message.redirect_url) {
-							window.location.href = r.message.redirect_url;
-						}
-					},
-				});
+		frm.add_custom_button(__("Request Access"), () => {
+			frappe.call({
+				method: "access_hub.api.request_access",
+				args: { remote_site: frm.doc.name },
+				freeze: true,
+				freeze_message: __("Requesting access..."),
+				callback: (r) => {
+					if (r.message && r.message.redirect_url) {
+						window.location.href = r.message.redirect_url;
+					}
+				},
 			});
+		});
 
 		// Rotating the token writes to the doc, so gate on write permission —
 		// read-only roles never see this, and rotate_transport_token's
@@ -53,7 +53,6 @@ frappe.ui.form.on("Remote Site", {
 							freeze: true,
 							callback: (r) => {
 								if (r.message) {
-									frm.reload_doc();
 									show_config_dialog(frm, r.message);
 								}
 							},

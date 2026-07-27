@@ -16,22 +16,30 @@ from access_hub.protocol import (
 
 
 class RemoteSite(Document):
+	def onload(self):
+		# savedocs() runs onload on the same doc right after save and serializes
+		# __onload into the save response — so a token applied during this write
+		# (create autogen or rotation) reaches the form's frm.doc.__onload with no
+		# reload. The plaintext lives only in a request-scoped flag; never stored.
+		plaintext = self.flags.get("new_token_plaintext")
+		if plaintext:
+			self.set_onload("transport_token_config", self.get_enrollment_config(plaintext))
+
 	def validate(self):
 		# Fresh doc with no token yet: autogenerate one so the row is usable out
-		# of the box. The plaintext is surfaced once via set_onload (read by the
-		# form on the save response), never stored — only its hash lives on.
+		# of the box. Only the hash is stored.
 		if self.is_new() and not self.transport_token_hash:
-			self._apply_token(secrets.token_urlsafe(32), onload=True)
+			self._apply_token(secrets.token_urlsafe(32))
 
-	def _apply_token(self, plaintext: str, onload: bool = False):
-		"""Hash `plaintext` into transport_token_hash. If `onload`, stash the
-		enrollment config (incl. the one-time plaintext) on the onload payload so
-		the form can show the copy dialog right after save."""
+	def _apply_token(self, plaintext: str):
+		"""Hash `plaintext` into transport_token_hash (plaintext never stored) and
+		flag it for onload to surface once. Every token-setting path (create
+		autogen, manual rotation) goes through here, so the copy dialog shows on
+		all of them."""
 		if len(plaintext) < TRANSPORT_TOKEN_MIN_LEN:
 			frappe.throw(f"Transport Token must be at least {TRANSPORT_TOKEN_MIN_LEN} characters long.")
 		self.transport_token_hash = transport_token_hash(plaintext)
-		if onload:
-			self.set_onload("transport_token_config", self.get_enrollment_config(plaintext))
+		self.flags.new_token_plaintext = plaintext
 
 	def get_enrollment_config(self, plaintext_token: str | None = None) -> dict:
 		"""The guard-side config an operator copies to enroll this site: hub URL,
@@ -51,9 +59,8 @@ class RemoteSite(Document):
 @frappe.whitelist()
 def rotate_transport_token(remote_site: str, token: str | None = None) -> dict:
 	"""Set (or autogenerate, when `token` is blank) this site's transport token,
-	storing only its hash. Returns the enrollment config with the one-time
-	plaintext so the form can show the copy dialog. doc.save() enforces write
-	permission on the Remote Site."""
+	storing only its hash, and return the one-time enrollment config for the copy
+	dialog. doc.save() enforces write permission on the Remote Site."""
 	doc = frappe.get_doc("Remote Site", remote_site)
 	plaintext = (token or "").strip() or secrets.token_urlsafe(32)
 	doc._apply_token(plaintext)

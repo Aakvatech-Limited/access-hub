@@ -9,9 +9,10 @@
   "port",
   "protocol",
   "is_fc_site",
-  "transport_token_hash",
+  "column_break_status",
   "app_version",
-  "last_announced_on"
+  "last_announced_on",
+  "transport_token_hash"
  ],
  "fields": [
   {
@@ -47,11 +48,16 @@
    "label": "Is FC Site"
   },
   {
-   "description": "SHA-256 of the transport token. The plaintext is shown once at creation/rotation and never stored.",
+   "description": "SHA-256 of the transport token; plaintext never stored.",
    "fieldname": "transport_token_hash",
    "fieldtype": "Data",
+   "hidden": 1,
    "label": "Transport Token Hash",
    "read_only": 1
+  },
+  {
+   "fieldname": "column_break_status",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "app_version",
