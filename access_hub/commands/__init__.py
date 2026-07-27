@@ -8,34 +8,6 @@ import click
 import frappe
 
 
-def _generate_paserk_keypair():
-	"""Generate a fresh Ed25519 PASETO v4.public keypair.
-
-	Returns (secret_paserk, public_paserk) as strings, e.g.
-	("k4.secret....", "k4.public....").
-	"""
-	from cryptography.hazmat.primitives import serialization
-	from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-	from pyseto import Key
-
-	sk = Ed25519PrivateKey.generate()
-
-	priv_pem = sk.private_bytes(
-		encoding=serialization.Encoding.PEM,
-		format=serialization.PrivateFormat.PKCS8,
-		encryption_algorithm=serialization.NoEncryption(),
-	)
-	pub_pem = sk.public_key().public_bytes(
-		encoding=serialization.Encoding.PEM,
-		format=serialization.PublicFormat.SubjectPublicKeyInfo,
-	)
-
-	priv_key = Key.new(version=4, purpose="public", key=priv_pem)
-	pub_key = Key.new(version=4, purpose="public", key=pub_pem)
-
-	return priv_key.to_paserk(), pub_key.to_paserk()
-
-
 @click.command("access-hub-generate-keypair")
 @click.option(
 	"--force",
@@ -74,10 +46,11 @@ def generate_keypair(ctx, force, site):
 			)
 			raise click.exceptions.Exit(1)
 
-		secret_paserk, public_paserk = _generate_paserk_keypair()
-
 		from frappe.installer import update_site_config
 
+		from access_hub.utils.crypto import generate_keypair_paserk
+
+		secret_paserk, public_paserk = generate_keypair_paserk()
 		update_site_config(CONF_HUB_PRIVATE_KEY, secret_paserk)
 		update_site_config(CONF_HUB_PUBLIC_KEY_LOCAL, public_paserk)
 

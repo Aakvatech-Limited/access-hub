@@ -6,47 +6,54 @@ import secrets
 import frappe
 from frappe.model.document import Document
 
-from access_hub.constants import TRANSPORT_TOKEN_MIN_LEN
+from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL, TRANSPORT_TOKEN_MIN_LEN
 from access_hub.protocol import transport_token_hash
 
 
 class RemoteSite(Document):
 	def validate(self):
-		self._generate_token_if_missing()
-		self._validate_token_length()
-		self._set_token_hash()
-		self._validate_protocol_downgrade()
+		# Fresh doc with no token yet: autogenerate one so the row is usable out
+		# of the box. The plaintext is surfaced once via set_onload (read by the
+		# form on the save response), never stored — only its hash lives on.
+		if self.is_new() and not self.transport_token_hash:
+			self._apply_token(secrets.token_urlsafe(32), onload=True)
 
-	def _generate_token_if_missing(self):
-		"""If no plaintext token was provided (fresh doc, no hash yet either),
-		autogenerate a CSPRNG token so the row is usable out of the box."""
-		if not self.transport_token and not self.transport_token_hash:
-			self.transport_token = secrets.token_urlsafe(32)
-
-	def _validate_token_length(self):
-		if self.transport_token and len(self.transport_token) < TRANSPORT_TOKEN_MIN_LEN:
+	def _apply_token(self, plaintext: str, onload: bool = False):
+		"""Hash `plaintext` into transport_token_hash. If `onload`, stash the
+		enrollment config (incl. the one-time plaintext) on the onload payload so
+		the form can show the copy dialog right after save."""
+		if len(plaintext) < TRANSPORT_TOKEN_MIN_LEN:
 			frappe.throw(f"Transport Token must be at least {TRANSPORT_TOKEN_MIN_LEN} characters long.")
+		self.transport_token_hash = transport_token_hash(plaintext)
+		if onload:
+			self.set_onload("transport_token_config", self.enrollment_config(plaintext))
 
-	def _set_token_hash(self):
-		"""Hash any newly-provided plaintext token. The plaintext is kept on the
-		in-memory doc (so the save response can show it once to the operator)
-		but is cleared from the database row right after commit."""
-		if self.transport_token:
-			self.transport_token_hash = transport_token_hash(self.transport_token)
-			self._clear_plaintext_after_commit = True
+	def enrollment_config(self, plaintext_token: str | None = None) -> dict:
+		"""The guard-side config an operator copies to enroll this site: hub URL,
+		public key, and the one-time transport token (present only when freshly
+		generated/rotated). after_install generates the keypair, so a missing key
+		is unexpected — surface it clearly rather than shipping half a config."""
+		public_key = frappe.conf.get(CONF_HUB_PUBLIC_KEY_LOCAL)
+		if not public_key:
+			frappe.throw("No hub keypair found. Run `bench access-hub-generate-keypair` first.")
+		return {
+			"access_guard_hub_url": frappe.utils.get_url(),
+			"access_guard_hub_public_key": public_key,
+			"access_guard_transport_token": plaintext_token,
+		}
 
-	def _validate_protocol_downgrade(self):
-		"""Never auto-downgrade https->http; only suggest http for :80 or
-		*.localhost, and only as a default on a new doc, never forced."""
-		# No auto-mutation here by design — protocol is user-editable and this
-		# validate hook must not silently flip it. Kept as a no-op hook point
-		# for future UI-side suggestion logic (client_script), per BUILD_PLAN.
-		pass
 
-	def on_update(self):
-		if getattr(self, "_clear_plaintext_after_commit", False):
-			frappe.db.set_value(self.doctype, self.name, "transport_token", "", update_modified=False)
-			self._clear_plaintext_after_commit = False
+@frappe.whitelist()
+def rotate_transport_token(remote_site: str, token: str | None = None) -> dict:
+	"""Set (or autogenerate, when `token` is blank) this site's transport token,
+	storing only its hash. Returns the enrollment config with the one-time
+	plaintext so the form can show the copy dialog. doc.save() enforces write
+	permission on the Remote Site."""
+	doc = frappe.get_doc("Remote Site", remote_site)
+	plaintext = (token or "").strip() or secrets.token_urlsafe(32)
+	doc._apply_token(plaintext)
+	doc.save()
+	return doc.enrollment_config(plaintext)
 
 
 def announce(host: str, port: int | None = None, protocol: str | None = None, app_version: str | None = None):

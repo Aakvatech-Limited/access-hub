@@ -5,3 +5,5 @@
 tags
 node_modules
 __pycache__
+# local dev reference, not committed
+.vscode/

@@ -9,7 +9,6 @@
   "port",
   "protocol",
   "enrollment_type",
-  "transport_token",
   "transport_token_hash",
   "app_version",
   "last_announced_on"
@@ -51,12 +50,7 @@
    "reqd": 1
   },
   {
-   "description": "Shown once at creation/regeneration. Not stored after hashing.",
-   "fieldname": "transport_token",
-   "fieldtype": "Data",
-   "label": "Transport Token"
-  },
-  {
+   "description": "SHA-256 of the transport token. The plaintext is shown once at creation/rotation and never stored.",
    "fieldname": "transport_token_hash",
    "fieldtype": "Data",
    "label": "Transport Token Hash",

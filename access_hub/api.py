@@ -16,52 +16,24 @@ from access_hub.protocol import (
 
 
 @frappe.whitelist()
-def get_enrollment_info(remote_site: str):
-	"""Return the three values a client admin needs to enroll access-guard
-	against this hub, for the given Remote Site.
+def get_hub_enrollment_info():
+	"""Return the hub-wide enrollment values shared by every client: the hub URL
+	and public key. These are identical across all Remote Sites, so they live in
+	Access Hub Settings rather than per-site. The per-site transport token is
+	shown only at creation/rotation, via the Remote Site dialog.
 
-	- access_guard_hub_url: this hub's own URL.
-	- access_guard_hub_public_key: this hub's PASETO public key (paserk
-	  k4.public...); errors clearly if no keypair has been generated yet.
-	- access_guard_transport_token: the plaintext transport token — only
-	  available immediately after the Remote Site was created/regenerated
-	  (the plaintext is cleared from the DB right after hashing); a clear
-	  message is returned instead if it has already been rotated away.
-
-	Gated on the Remote Site doctype's own "read" permission (currently
-	System Manager only) rather than a hardcoded role check — this returns
-	the plaintext transport token and the hub's public key, so it must never
-	be less strict than Remote Site's own permissions block.
+	Gated on Access Hub Settings "read" (System Manager) since it returns the
+	hub's public key.
 	"""
-	frappe.has_permission("Remote Site", "read", doc=remote_site, throw=True)
-
-	if not frappe.db.exists("Remote Site", remote_site):
-		frappe.throw(f"Remote Site {remote_site!r} not found.")
+	frappe.has_permission("Access Hub Settings", "read", throw=True)
 
 	public_key = frappe.conf.get(CONF_HUB_PUBLIC_KEY_LOCAL)
 	if not public_key:
-		frappe.throw(
-			"No hub keypair found. Run `bench access-hub-generate-keypair` on the " "hub site first."
-		)
-
-	doc = frappe.get_doc("Remote Site", remote_site)
-	plaintext_token = doc.transport_token
-	if plaintext_token:
-		token_note = None
-	else:
-		plaintext_token = None
-		token_note = (
-			"The transport token is only shown once, right after this Remote Site "
-			"was created or its token was last regenerated. It has already been "
-			"rotated away (only its hash is stored) — regenerate the token on this "
-			"Remote Site to see it again."
-		)
+		frappe.throw("No hub keypair found. Run `bench access-hub-generate-keypair` first.")
 
 	return {
 		"access_guard_hub_url": frappe.utils.get_url(),
 		"access_guard_hub_public_key": public_key,
-		"access_guard_transport_token": plaintext_token,
-		"transport_token_note": token_note,
 	}
 
 

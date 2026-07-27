@@ -117,11 +117,30 @@ def push_policy_to_all_sites(token: str):
 
 
 def after_install():
-	"""Idempotent seed: create the Access Hub Settings Single with the
-	protocol's default deny rule if it doesn't already have any rules."""
+	"""Make the hub usable out of the box: generate the signing keypair if
+	absent, and seed the Access Hub Settings Single with the protocol's default
+	deny rule. Both steps are idempotent."""
+	from access_hub.utils.crypto import ensure_keypair
+
+	ensure_keypair()
+
 	settings = frappe.get_single("Access Hub Settings")
 	if settings.rules:
 		return
+
+	# Seed the required scalar fields from protocol defaults. Field-level
+	# defaults in the JSON cover the desk-created case, but a freshly-installed
+	# Single loaded here has them blank — set them explicitly so save() passes.
+	for fieldname, policy_key in (
+		("session_expiry_seconds", POLICY_SESSION_EXPIRY_SECONDS),
+		("max_key_size_bytes", POLICY_MAX_KEY_SIZE_BYTES),
+		("retention_days", POLICY_RETENTION_DAYS),
+		("push_grace_days", POLICY_PUSH_GRACE_DAYS),
+		("name_suffix", POLICY_NAME_SUFFIX),
+	):
+		if not settings.get(fieldname):
+			settings.set(fieldname, POLICY_DEFAULTS[policy_key])
+
 	default_rule = POLICY_DEFAULTS[POLICY_RULES][0]
 	settings.append(
 		"rules",

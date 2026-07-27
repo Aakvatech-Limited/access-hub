@@ -4,6 +4,9 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "enrollment_section",
+  "hub_enrollment_info",
+  "policy_section",
   "rules",
   "session_expiry_seconds",
   "always_log_doctypes",
@@ -16,6 +19,22 @@
   "current_policy_token"
  ],
  "fields": [
+  {
+   "fieldname": "enrollment_section",
+   "fieldtype": "Section Break",
+   "label": "Enrollment"
+  },
+  {
+   "description": "Hub-wide values every client's access-guard needs. The per-site transport token is set on each Remote Site.",
+   "fieldname": "hub_enrollment_info",
+   "fieldtype": "HTML",
+   "label": "Enrollment Info"
+  },
+  {
+   "fieldname": "policy_section",
+   "fieldtype": "Section Break",
+   "label": "Policy"
+  },
   {
    "fieldname": "rules",
    "fieldtype": "Table",
