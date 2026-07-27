@@ -54,7 +54,6 @@ def generate_keypair(ctx, force, site):
 		click.secho(f"Public key written to site_config.json ({CONF_HUB_PUBLIC_KEY_LOCAL}).", fg="green")
 		click.secho("Public key (paste into each client's access_guard_hub_public_key):", fg="yellow")
 		click.echo(public_paserk)
-		click.secho("Full enrollment info is on the Access Hub Settings form.", fg="cyan")
 	finally:
 		frappe.destroy()
 
