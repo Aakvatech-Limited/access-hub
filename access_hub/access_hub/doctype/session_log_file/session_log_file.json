@@ -78,6 +78,7 @@
    "read_only": 1
   }
  ],
+ "in_create": 1,
  "links": [],
  "modified": "2026-01-01 00:00:00.000000",
  "modified_by": "Administrator",
@@ -94,8 +95,7 @@
    "read": 1,
    "report": 1,
    "role": "System Manager",
-   "share": 1,
-   "write": 1
+   "share": 1
   }
  ],
  "sort_field": "modified",

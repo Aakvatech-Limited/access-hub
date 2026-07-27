@@ -10,12 +10,14 @@
   "emp_email",
   "remote_site",
   "jti",
+  "status_col_break",
   "status",
   "issued_at",
   "expires_at",
   "session_section",
   "start_time",
   "end_time",
+  "logout_reason_col_break",
   "logout_reason"
  ],
  "fields": [
@@ -57,14 +59,17 @@
   {
    "fieldname": "jti",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "label": "JTI",
    "read_only": 1,
    "unique": 1
   },
   {
+   "fieldname": "status_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
    "default": "Issued",
-   "description": "Issued: minted, not yet redeemed. Active: guard accepted it, session live. Ended: session torn down (see Logout Reason). A guard that can't reach the hub may leave this stale rather than wrong - there's no cron flipping states here.",
+   "description": "Issued: minted, not yet redeemed. Active: guard accepted it, session live. Ended: session torn down (see Logout Reason).",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -107,12 +112,17 @@
    "read_only": 1
   },
   {
+   "fieldname": "logout_reason_col_break",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "logout_reason",
    "fieldtype": "Data",
    "label": "Logout Reason",
    "read_only": 1
   }
  ],
+ "in_create": 1,
  "links": [
   {
    "group": "Logs",
@@ -135,8 +145,7 @@
    "read": 1,
    "report": 1,
    "role": "System Manager",
-   "share": 1,
-   "write": 1
+   "share": 1
   }
  ],
  "sort_field": "modified",
