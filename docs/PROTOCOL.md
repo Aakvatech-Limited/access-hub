@@ -57,7 +57,9 @@ PASETO `v4.public`, signed with the hub private key. Claims:
 
 | claim | source | notes |
 |---|---|---|
-| `user_name` | user full name | custom |
+| `user_first_name` | user first name | custom |
+| `user_middle_name` | user middle name | custom; may be null |
+| `user_last_name` | user last name | custom |
 | `user_email` | user email | custom; becomes the ephemeral user id |
 | `aud` | `transport_token_hash(client token)` | registered; verified on accept |
 | `iat` | now | registered (ISO-8601) |

@@ -12,7 +12,9 @@ from access_hub.protocol import (
 	CLAIM_JTI,
 	CLAIM_PV,
 	CLAIM_USER_EMAIL,
-	CLAIM_USER_NAME,
+	CLAIM_USER_FIRST_NAME,
+	CLAIM_USER_LAST_NAME,
+	CLAIM_USER_MIDDLE_NAME,
 	PV,
 )
 from access_hub.utils.crypto import sign_paseto
@@ -49,8 +51,14 @@ def create_and_mint(user: str, site: "frappe.model.document.Document") -> tuple[
 	# linked User, no separate lookup needed here.
 	grant.insert(ignore_permissions=True)
 
+	first_name, middle_name, last_name = frappe.db.get_value(
+		"User", user, ["first_name", "middle_name", "last_name"]
+	)
+
 	claims = {
-		CLAIM_USER_NAME: grant.user_name,
+		CLAIM_USER_FIRST_NAME: first_name,
+		CLAIM_USER_MIDDLE_NAME: middle_name,
+		CLAIM_USER_LAST_NAME: last_name,
 		CLAIM_USER_EMAIL: grant.user_email,
 		"aud": site.transport_token_hash,
 		CLAIM_JTI: jti,
