@@ -24,7 +24,6 @@
   {
    "fieldname": "employee",
    "fieldtype": "Link",
-   "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Employee",
    "options": "User",
@@ -72,6 +71,7 @@
    "description": "Issued: minted, not yet redeemed. Active: guard accepted it, session live. Ended: session torn down (see Logout Reason).",
    "fieldname": "status",
    "fieldtype": "Select",
+   "hidden": 1,
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
