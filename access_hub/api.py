@@ -67,6 +67,13 @@ def request_access(remote_site: str):
 	return {"redirect_url": build_accept_url(remote_site, token)}
 
 
+@frappe.whitelist()
+def can_read_remote_site() -> bool:
+	"""Whether the current user may read Remote Site — used by the Helpdesk
+	ticket form script to decide whether to show the 'Access Sites' button."""
+	return bool(frappe.has_permission("Remote Site", "read"))
+
+
 # --- Ingest endpoints (PROTOCOL §5) -----------------------------------------
 # Authenticated by transport token, sent raw (no "Bearer " prefix) in the
 # custom TRANSPORT_TOKEN_HEADER — see protocol.py's comment above that
