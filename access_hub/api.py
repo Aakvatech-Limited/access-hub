@@ -76,8 +76,7 @@ def ticket_sites_url(customer: str | None = None) -> str | None:
 	— the route is owned here, not hardcoded in the form script."""
 	if not frappe.has_permission("Remote Site", "read"):
 		return None
-	# Desk list route for the doctype (Frappe uses the hyphenated slug under /app).
-	list_url = frappe.utils.get_url("/app/remote-site")
+	list_url = frappe.utils.get_url_to_list("Remote Site")
 	return f"{list_url}?customer={quote(customer)}" if customer else list_url
 
 
