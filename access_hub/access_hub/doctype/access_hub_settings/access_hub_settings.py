@@ -58,6 +58,13 @@ class AccessHubSettings(Document):
 				frappe.throw("Each rule row needs a Document Type.")
 
 	def on_update(self):
+		self.republish_policy()
+
+	def republish_policy(self):
+		"""Rebuild + push the signed policy token. Callable directly by
+		anything that needs to force a republish outside of a Settings save
+		(e.g. user_events on User disable/delete) without depending on
+		on_update's other side effects."""
 		# Before the keypair exists (e.g. right after install seeds defaults) we
 		# can't sign yet. Leave the token empty; get_current_policy_token() builds
 		# it lazily on first fetch, once `bench access-hub-generate-keypair` has run.
@@ -66,11 +73,10 @@ class AccessHubSettings(Document):
 		except ClientNotConfiguredError:
 			return
 		frappe.db.set_value(self.doctype, self.name, "current_policy_token", token, update_modified=False)
-		# Policy push is not configurable in v1 - always best-effort, so a kill
-		# switch/blacklist change reaches guards as fast as possible. It's
-		# already fail-open (push_policy_to_all_sites swallows failures) and
-		# backstopped by the guard's own unconditional hourly pull.
-		push_policy_to_all_sites(token)
+		# Not configurable in v1 - always best-effort (backstopped by the
+		# guard's unconditional hourly pull). Enqueued after commit so a
+		# rolled-back save can never push a policy that was never saved.
+		frappe.enqueue(push_policy_to_all_sites, queue="long", enqueue_after_commit=True, token=token)
 
 	def as_policy_dict(self) -> dict:
 		"""Build the normalized policy object (protocol.POLICY_* keys) from this
@@ -101,15 +107,18 @@ class AccessHubSettings(Document):
 			POLICY_PUSH_GRACE_DAYS: self.push_grace_days or POLICY_DEFAULTS[POLICY_PUSH_GRACE_DAYS],
 			POLICY_NAME_SUFFIX: self.name_suffix or POLICY_DEFAULTS[POLICY_NAME_SUFFIX],
 			POLICY_ACCESS_DISABLED: bool(self.access_disabled),
-			# User.name IS the email, so row.user is already the emp_email the
-			# guard's grant files key on — no separate email field needed.
-			POLICY_BLACKLISTED_EMAILS: [row.user for row in self.blacklisted_users if row.user],
+			# Unioned with disabled_granted_user_emails() (self-correcting, no cleanup needed).
+			POLICY_BLACKLISTED_EMAILS: list(
+				{row.user for row in self.blacklisted_users if row.user} | disabled_granted_user_emails()
+			),
 		}
 
 	def is_blacklisted(self, employee: str) -> bool:
-		return bool(self.access_disabled) or employee in {
-			row.user for row in self.blacklisted_users if row.user
-		}
+		if bool(self.access_disabled):
+			return True
+		if employee in {row.user for row in self.blacklisted_users if row.user}:
+			return True
+		return not bool(frappe.db.get_value("User", employee, "enabled"))
 
 	def build_and_sign_policy_token(self) -> str:
 		policy = self.as_policy_dict()
@@ -123,6 +132,21 @@ class AccessHubSettings(Document):
 		claims["iat"] = now.isoformat()
 		claims["exp"] = frappe.utils.add_to_date(now, days=POLICY_TOKEN_TTL_DAYS).isoformat()
 		return sign_paseto(claims)
+
+
+def disabled_granted_user_emails() -> set[str]:
+	"""Emails ever granted access whose User is now disabled or gone.
+	Derived live, not stored - re-enabling the User clears it automatically."""
+	rows = frappe.db.sql(
+		"""
+		select distinct g.emp_email as emp_email
+		from `tabAccess Grant` g
+		left join `tabUser` u on u.name = g.employee and u.enabled = 1
+		where g.emp_email is not null and u.name is null
+		""",
+		as_dict=True,
+	)
+	return {row.emp_email for row in rows}
 
 
 def get_current_policy_token() -> str:
@@ -147,7 +171,7 @@ def push_policy_to_all_sites(token: str):
 	for site in frappe.get_all("Remote Site", fields=["name", "host", "port", "protocol"]):
 		url = f"{site.protocol}://{site.host}:{site.port}/api/method/access_guard.api.receive_policy"
 		try:
-			requests.post(url, json={"policy_token": token}, timeout=5)
+			requests.post(url, json={"policy_token": token}, timeout=30)
 		except Exception:
 			frappe.logger("access_hub").info(f"policy push to {site.name} failed (best-effort, ignored)")
 

@@ -127,9 +127,14 @@ The matched Remote Site (not any payload field) is what identifies the client to
 | method | payload | returns |
 |---|---|---|
 | `access_hub.api.get_policy` | — | `{ "policy_token": "<paseto>" }` |
-| `access_hub.api.push_logs` | `{ jti, host, session_meta, ndjson }` | `{ ok, received_lines }` |
+| `access_hub.api.push_logs` | `{ jti, host, log_kind: "request"\|"doc", session_meta, lines }` | `{ ok, received_lines }` |
+| `access_hub.api.report_session_event` | `{ jti, event: "accepted"\|"login"\|"logout", reason }` | `{ ok }` |
 | `access_hub.api.announce` | `{ host, port, protocol, app_version, pv }` | `{ ok }` |
 | `access_hub.api.report_provisioning` | `{ jti, event: "created"\|"reaped", user, ts }` | `{ ok }` |
+
+`report_session_event` is called immediately (not batched with the hourly
+`push_logs`) — always on, no policy opt-out — so the hub's Access Grant reflects
+session start/end in near-real-time.
 
 ### Guard
 | method | auth | payload | returns |
@@ -160,14 +165,18 @@ Authoritative for the reaper, the session guard, and provisioning reports. Never
 "Which users may the reaper touch?" → only `user` values present in grant files (namespace filter,
 `ephemeral_users()`).
 
-## 7. Log line schema (`site/private/access_guard/logs/<jti>.jsonl`)
+## 7. Log line schema (`site/private/access_guard/logs/<jti>.log`, `<jti>.doc.log`)
 
-One file per session (jti). Append-only, plain open-append-close per request.
+Two files per session (jti) — no per-line type/jti/sid, since the filename already identifies
+both. logfmt lines (`key=value`, space-separated; a value containing whitespace is JSON-quoted).
+Session lifecycle (accepted/login/logout) has no local file — see `report_session_event` (§5).
 
-```json
-{"ts":"iso","jti":"...","sid":"...","type":"request","method":"...","http_method":"POST","status":"ok|error","args":<truncated to max_key_size>}
-{"ts":"iso","jti":"...","sid":"...","type":"doc","doctype":"User","name":"...","action":"write","diff":{...}}   // after_commit, size-exempt
-{"ts":"iso","jti":"...","sid":"...","type":"session","event":"accepted|login|logout","reason":"..."}
+```
+# <jti>.log — one line per whitelisted call, written once from after_request
+ts=<iso> path=frappe.client.save http_method=POST status=ok code=200 body=<raw request body, truncated to max_key_size>
+
+# <jti>.doc.log — one line per committed change to an always-log doctype (after_commit, size-exempt)
+ts=<iso> event=write doctype=User name=... doc={"...":"full doc state at commit, not a diff"}
 ```
 
 Request logging keys the skip decision off the **HTTP verb**, not the endpoint name: **safe verbs**
@@ -175,8 +184,7 @@ Request logging keys the skip decision off the **HTTP verb**, not the endpoint n
 **unsafe verbs are always logged**. Rationale: a user's mutating action always arrives via an
 unsafe verb, so this is a version-proof signal needing no per-endpoint denylist and no reliance on
 `transaction_writes`; sensitive-doctype writes are still caught verb-independently by the always-log
-doc channel (`always_log_doctypes`). The endpoint name is recorded in `method`, the verb in
-`http_method`, for context.
+doc channel (`always_log_doctypes`).
 
 ## 8. Version / errors
 

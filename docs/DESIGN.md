@@ -46,7 +46,7 @@ service of them.
 An employee can become System Manager on a client site, so the **client DB is
 attacker-controlled**. Nothing the security model depends on may live in the DB.
 All integrity-critical state lives in **files** under
-`site/private/access_guard/` (JSON config, per-session `.jsonl` logs, grant/jti
+`site/private/access_guard/` (JSON config, per-session logfmt logs, grant/jti
 state), out of desk reach. **Redis** and **site_config** are NOT reachable from
 the UI or server scripts, so Redis is a *trusted-but-volatile* cache: files
 remain authoritative for durability (Redis flushes/evicts → re-derive from
@@ -244,7 +244,7 @@ permissions can't gate anything — enforcement is entirely guard **code** keyed
 **Prevention vs. detection boundary (accepted).** The guard is app code; an
 attacker with server-script (Python) execution could sidestep hooks. Accepted —
 mitigation is **detection via logging**, and the log sink is out of reach:
-`.jsonl` files under `site/private/` are not touchable by a server script absent
+Log files under `site/private/` are not touchable by a server script absent
 an actual exploit, and once a line is pushed to the hub it is immutable from the
 client. Shorter push interval = smaller pre-immutability window; hourly is
 acceptable given the file is already out of desk reach.
@@ -286,34 +286,36 @@ Rides the client→hub channel. Actions are written to files under
 `jti`, pushed hourly. No per-site signing keys — the file-outside-the-DB boundary
 already defends against the in-scope adversary.
 
-**Mechanism — one file per session, plain append.** Do **not** use `frappe.logger`
+**Mechanism — two files per session, plain append.** Do **not** use `frappe.logger`
 (routes by module, wrong dir) and do **not** create one `logging.Logger` per sid
-(handler/fd leak in long-lived workers). Instead **append JSONL to a per-session
-file, open-append-close per line** (traffic is a human doing manual ops — low
-volume). The file is named by `jti` (stable, ties to hub records); `sid → jti` is
-recorded in the grant file at login, so `before_request` reads
-`frappe.session.sid` → maps to `jti` → appends. Log-line schema is in
+(handler/fd leak in long-lived workers). Instead **append logfmt lines to
+per-session files, open-append-close per line** (traffic is a human doing manual
+ops — low volume): `<jti>.log` for requests, `<jti>.doc.log` for doc changes — no
+per-line type/jti/sid, since the filename already identifies both. `sid → jti` is
+recorded in the grant file at login, so `before_request`/`after_request` read
+`frappe.session.sid` → map to `jti` → append. Log-line schema is in
 [PROTOCOL.md §7](PROTOCOL.md).
 
 **What gets logged:**
-- **Request stream (every attempt):** logged at `before_request` (+ outcome/status
-  at `after_request`). The skip decision keys off **HTTP verb safety, not an
-  endpoint name**: safe verbs (GET/HEAD/OPTIONS — Frappe's
-  `frappe.auth.SAFE_HTTP_METHODS`) are **skipped unless `log_reads` is on**
-  (default off); unsafe verbs are **always logged**. A user's mutating action
-  always arrives via an unsafe verb, so this is a reliable, version-proof signal —
-  no per-endpoint denylist, no reliance on `frappe.db.transaction_writes`. The
-  endpoint name is still recorded for context.
+- **Request stream — one line per call, written from `after_request`:** the skip
+  decision keys off **HTTP verb safety, not an endpoint name**: safe verbs
+  (GET/HEAD/OPTIONS — Frappe's `frappe.auth.SAFE_HTTP_METHODS`) are **skipped
+  unless `log_reads` is on** (default off); unsafe verbs are **always logged**. A
+  user's mutating action always arrives via an unsafe verb, so this is a reliable,
+  version-proof signal — no per-endpoint denylist, no reliance on
+  `frappe.db.transaction_writes`. The raw request body is captured (size-capped),
+  not form_dict-derived args — meaningful for both JSON and non-JSON payloads.
 - **Sensitive-doctype writes (always, in full):** `doc_events` `on_update` /
   `on_trash` on a configurable always-log doctype list (default: User, Server
-  Script) register a `frappe.db.after_commit` callback that appends the diff — **no
-  commit → no log** (rolled-back writes aren't logged). Exempt from the size cap.
-  This is the reliable channel that *knows the doctype*, so it catches a sensitive
-  write verb-independently, even if it rode a safe verb the request stream skipped.
-- **Max key size (default 512 KB):** truncate logged request args beyond this;
-  sensitive-doctype diffs are exempt.
-- **Session lifecycle:** grant-accepted / login / logout (+ reason) recorded to
-  the same session file.
+  Script) register a `frappe.db.after_commit` callback that appends the doc's full
+  state at commit time (not a diff) — **no commit → no log**. Exempt from the size
+  cap. This is the reliable channel that *knows the doctype*, so it catches a
+  sensitive write verb-independently, even if it rode a safe verb the request
+  stream skipped.
+- **Max key size (default 512 KB):** truncates the logged request body; doc-change
+  lines are exempt.
+- **Session lifecycle:** grant-accepted / login / logout (+ reason) has no local
+  file — pushed immediately to the hub's Access Grant, see below.
 
 ---
 
@@ -322,16 +324,20 @@ recorded in the grant file at login, so `before_request` reads
 The hub is **not** attacker-controlled (employees are not System Managers on the
 helpdesk), so DocTypes are fine here — the no-DB-trust rule is client-only.
 
-- **Session Log → DocType:** one row per session (client, jti, employee, start,
-  end, logout reason) — low volume, queryable.
-- **Request log → files + index (hybrid):** store the pushed per-session `.jsonl`
-  as files (`base/<remote_site>/jti.jsonl`) — a DocType table would bloat across
-  hundreds of clients — plus a lightweight **Session Log File** index DocType
-  (client, jti, employee, path, line count) for search/browse.
+- **Session lifecycle → Access Grant:** start/end time and logout reason live on
+  the same Access Grant row a request mints (no separate Session Log DocType) —
+  one thing per session, and the guard pushes these fields immediately
+  (`access_hub.api.report_session_event`, always on, no policy opt-out) rather
+  than waiting for the hourly log sync.
+- **Request/doc logs → files + index (hybrid):** store the pushed per-session logs
+  as files (`base/<remote_site>/jti.log`, `jti.doc.log`) — a DocType table would
+  bloat across hundreds of clients — plus a lightweight **Session Log File** index
+  DocType, one row per (jti, log_kind), for search/browse.
 - **Safe serving:** never accept a client-supplied path. Serve by DocType id →
   resolve to a canonical path server-side → normalize and assert the real path is
-  within `base_dir` (traversal guard) → support line/byte-range partial views.
-  Gated on the Session Log File doctype's own read permission (System Manager).
+  within `base_dir` (traversal guard). Gated on the Session Log File doctype's own
+  read permission (System Manager). Download-only in v1 — line-range viewing is
+  deferred to v2.
 - **Retention:** hub-configured, default 365 days, polled by the guard; a
   session's local file is deleted when **(acked by hub AND local age > grace
   [default ~7 days]) OR age > max (365d)**. The grace buffer protects against

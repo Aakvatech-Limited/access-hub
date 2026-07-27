@@ -15,6 +15,7 @@ from access_hub.access_hub.doctype.access_grant.access_grant import (
 )
 from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
 	get_current_policy_token,
+	push_policy_to_all_sites,
 )
 from access_hub.access_hub.doctype.session_log_file.session_log_file import (
 	append_lines,
@@ -103,16 +104,16 @@ class HubTestCase(FrappeTestCase):
 
 	def register_log_file_cleanup(self, host, jti):
 		"""append_lines() writes real files under base_dir() - no DB rollback
-		touches those. Delete the on-disk file, plus any Session Log /
-		Session Log File rows a real ingest call may have committed for it."""
+		touches those. Delete both on-disk files (request + doc kind), plus
+		any Session Log File rows a real ingest call may have committed."""
 		self.addCleanup(self._delete_log_artifacts, host, jti)
 
 	@staticmethod
 	def _delete_log_artifacts(host, jti):
-		p = path_for(host, jti)
-		if os.path.exists(p):
-			os.remove(p)
-		frappe.db.delete("Session Log", {"jti": jti})
+		for log_kind in ("request", "doc"):
+			p = path_for(host, jti, log_kind)
+			if os.path.exists(p):
+				os.remove(p)
 		frappe.db.delete("Session Log File", {"jti": jti})
 		frappe.db.commit()
 
@@ -128,6 +129,7 @@ class TestKeypairAndGrantMinting(HubTestCase):
 
 		self.assertEqual(grant.status, "Issued")
 		self.assertTrue(grant.jti)
+		self.assertEqual(grant.emp_email, user.email or user.name)
 
 		pub = get_public_key()
 		decoded = pyseto.decode(pub, token)
@@ -153,6 +155,56 @@ class TestKeypairAndGrantMinting(HubTestCase):
 		pub = get_public_key()
 		with self.assertRaises(Exception):
 			pyseto.decode(pub, tampered)
+
+	def test_grant_autonames_by_jti(self):
+		"""Access Grant now folds in what Session Log used to be
+		responsible for; autoname must be the jti itself so a lookup is a
+		direct frappe.get_doc("Access Grant", jti), no filter needed."""
+		site = self.make_remote_site("test-autoname-site.localhost")
+		user = self.make_user("autoname-employee@example.com")
+		grant, _token = create_and_mint(user.name, site.name)
+		self.assertEqual(grant.name, grant.jti)
+
+
+class TestSessionLifecycleEvents(HubTestCase):
+	"""record_session_event / report_session_event: the merged Access Grant
+	tracks session start/end + logout reason, pushed immediately by the
+	guard (not batched with the hourly activity-log sync)."""
+
+	def setUp(self):
+		self.site = self.make_remote_site(f"test-session-event-{self._testMethodName}.localhost")
+		self.user = self.make_user(f"session-event-{self._testMethodName}@example.com")
+		self.grant, _token = create_and_mint(self.user.name, self.site.name)
+
+	def test_accepted_and_login_set_active_and_start_time(self):
+		from access_hub.access_hub.doctype.access_grant.access_grant import record_session_event
+
+		record_session_event(self.grant.jti, "accepted")
+		grant = frappe.get_doc("Access Grant", self.grant.jti)
+		self.assertEqual(grant.status, "Active")
+		self.assertTrue(grant.start_time)
+
+		first_start_time = grant.start_time
+		record_session_event(self.grant.jti, "login")
+		grant.reload()
+		self.assertEqual(grant.status, "Active")
+		self.assertEqual(grant.start_time, first_start_time, "start_time must not move on a later event")
+
+	def test_logout_sets_ended_end_time_and_reason(self):
+		from access_hub.access_hub.doctype.access_grant.access_grant import record_session_event
+
+		record_session_event(self.grant.jti, "login")
+		record_session_event(self.grant.jti, "logout", reason="idle_expired")
+
+		grant = frappe.get_doc("Access Grant", self.grant.jti)
+		self.assertEqual(grant.status, "Ended")
+		self.assertTrue(grant.end_time)
+		self.assertEqual(grant.logout_reason, "idle_expired")
+
+	def test_unknown_jti_is_a_no_op(self):
+		from access_hub.access_hub.doctype.access_grant.access_grant import record_session_event
+
+		record_session_event("no-such-jti-at-all", "login")  # must not raise
 
 
 class TestPolicyToken(HubTestCase):
@@ -227,7 +279,89 @@ class TestPolicyToken(HubTestCase):
 		settings.access_disabled = 0
 		settings.save(ignore_permissions=True)
 		self.assertTrue(settings.is_blacklisted(user.name), "still blacklisted individually")
-		self.assertFalse(settings.is_blacklisted("someone-else@example.com"))
+
+		other_user = self.make_user(f"someone-else-{self._testMethodName}@example.com", first_name="Other")
+		self.assertFalse(settings.is_blacklisted(other_user.name))
+
+
+class TestDisabledAndDeletedUserEviction(HubTestCase):
+	"""A User disabled or deleted after having been granted access must be
+	evicted (unioned into blacklisted_emails) automatically, without ever
+	touching the admin-edited Blacklisted Users table — and it must clear
+	itself the moment the condition is no longer true, with no cleanup code."""
+
+	def test_disabled_user_with_grant_is_evicted_and_clears_on_reenable(self):
+		from access_hub.access_hub.doctype.access_grant.access_grant import create_and_mint
+		from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
+			disabled_granted_user_emails,
+		)
+
+		site = self.make_remote_site(f"test-evict-{self._testMethodName}.localhost")
+		user = self.make_user(f"evict-disable-{self._testMethodName}@example.com", first_name="Evictee")
+		create_and_mint(user.name, site.name)
+		self.addCleanup(frappe.db.delete, "Access Grant", {"employee": user.name})
+
+		self.assertNotIn(user.name, disabled_granted_user_emails())
+
+		user.enabled = 0
+		user.save(ignore_permissions=True)
+		self.assertIn(user.name, disabled_granted_user_emails())
+
+		settings = frappe.get_single("Access Hub Settings")
+		self.assertTrue(settings.is_blacklisted(user.name))
+
+		user.enabled = 1
+		user.save(ignore_permissions=True)
+		self.assertNotIn(user.name, disabled_granted_user_emails())
+
+	def test_deleted_user_with_grant_stays_evicted(self):
+		"""emp_email is snapshotted onto Access Grant at mint time, so eviction
+		survives the User row being deleted outright (not just disabled)."""
+		from access_hub.access_hub.doctype.access_grant.access_grant import create_and_mint
+		from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
+			disabled_granted_user_emails,
+		)
+
+		site = self.make_remote_site(f"test-evict-del-{self._testMethodName}.localhost")
+		email = f"evict-delete-{self._testMethodName}@example.com"
+		user = self.make_user(email, first_name="Evictee")
+		create_and_mint(user.name, site.name)
+		self.addCleanup(frappe.db.delete, "Access Grant", {"emp_email": email})
+
+		# force=True: mirrors a real delete of a User with linked grants.
+		frappe.delete_doc("User", email, force=True, ignore_permissions=True)
+		frappe.db.commit()
+
+		self.assertIn(email, disabled_granted_user_emails())
+
+	def test_user_disable_triggers_policy_republish(self):
+		from unittest.mock import patch
+
+		user = self.make_user(f"evict-push-{self._testMethodName}@example.com", first_name="PushTest")
+
+		with patch("frappe.enqueue") as mock_enqueue:
+			user.enabled = 0
+			user.save(ignore_permissions=True)
+
+		self.assertTrue(
+			any(c.args and c.args[0] is push_policy_to_all_sites for c in mock_enqueue.call_args_list)
+		)
+
+	def test_user_delete_triggers_policy_republish(self):
+		from unittest.mock import patch
+
+		user = self.make_user(f"evict-push-del-{self._testMethodName}@example.com", first_name="PushTest")
+		# make_user's own cleanup would try to delete this same user again;
+		# harmless no-op via frappe.db.exists guard in _delete_user, but we
+		# delete it ourselves here so the push-mock window is tight.
+
+		with patch("frappe.enqueue") as mock_enqueue:
+			frappe.delete_doc("User", user.name, force=True, ignore_permissions=True)
+			frappe.db.commit()
+
+		self.assertTrue(
+			any(c.args and c.args[0] is push_policy_to_all_sites for c in mock_enqueue.call_args_list)
+		)
 
 
 class TestRemoteSite(HubTestCase):
@@ -305,60 +439,33 @@ class TestLogServing(HubTestCase):
 		host = f"test-logserve-{self._testMethodName}.localhost"
 		self.site = self.make_remote_site(host)
 
-	def test_valid_id_serves_lines(self):
-		from access_hub.access_hub.doctype.session_log_file.session_log_file import upsert_index
-		from access_hub.api import get_session_log_lines
-
-		jti = f"test-log-{self._testMethodName}-jti"
-		self.register_log_file_cleanup(self.site.name, jti)
-		append_lines(self.site.name, jti, '{"a":1}\n{"b":2}')
-		doc = upsert_index(self.site.name, jti, employee="x@example.com", added_lines=2)
-
-		frappe.set_user("Administrator")
-		result = get_session_log_lines(name=doc.name)
-		self.assertEqual(result["lines"], ['{"a":1}', '{"b":2}'])
-
-	def test_non_system_manager_cannot_read_lines(self):
-		from access_hub.access_hub.doctype.session_log_file.session_log_file import upsert_index
-		from access_hub.api import get_session_log_lines
-
-		jti = f"test-log-perm-{self._testMethodName}-jti"
-		self.register_log_file_cleanup(self.site.name, jti)
-		append_lines(self.site.name, jti, '{"a":1}')
-		doc = upsert_index(self.site.name, jti, employee="x@example.com", added_lines=1)
-
-		email = f"no-access-{self._testMethodName}@example.com"
-		self.make_user(email, last_name="Access")
-
-		# frappe.only_for() short-circuits to a no-op when frappe.flags.in_test
-		# is set (true for the whole run-tests process) or the user is
-		# Administrator - neither of which reflects the real deny path, so
-		# flip in_test off for the duration of this one assertion to exercise
-		# the actual role check.
-		frappe.set_user(email)
-		original_in_test = frappe.flags.in_test
-		frappe.flags.in_test = False
-		try:
-			with self.assertRaises(frappe.PermissionError):
-				get_session_log_lines(name=doc.name)
-		finally:
-			frappe.flags.in_test = original_in_test
-			frappe.set_user("Administrator")
-
 	def test_download_serves_full_file_content(self):
 		from access_hub.access_hub.doctype.session_log_file.session_log_file import upsert_index
 		from access_hub.api import download_session_log
 
 		jti = f"test-log-dl-{self._testMethodName}-jti"
 		self.register_log_file_cleanup(self.site.name, jti)
-		append_lines(self.site.name, jti, '{"a":1}\n{"b":2}')
-		doc = upsert_index(self.site.name, jti, employee="x@example.com", added_lines=2)
+		append_lines(self.site.name, jti, "request", "ts=1 path=x\nts=2 path=y")
+		doc = upsert_index(self.site.name, jti, log_kind="request", employee="x@example.com", added_lines=2)
 
 		frappe.set_user("Administrator")
 		download_session_log(name=doc.name)
 		self.assertEqual(frappe.local.response.get("type"), "download")
-		self.assertEqual(frappe.local.response.get("filename"), f"{jti}.jsonl")
-		self.assertIn(b'{"a":1}', frappe.local.response.get("filecontent"))
+		self.assertEqual(frappe.local.response.get("filename"), f"{jti}.log")
+		self.assertIn(b"path=x", frappe.local.response.get("filecontent"))
+
+	def test_download_serves_doc_kind_with_correct_extension(self):
+		from access_hub.access_hub.doctype.session_log_file.session_log_file import upsert_index
+		from access_hub.api import download_session_log
+
+		jti = f"test-log-dl-doc-{self._testMethodName}-jti"
+		self.register_log_file_cleanup(self.site.name, jti)
+		append_lines(self.site.name, jti, "doc", "ts=1 event=write doctype=User")
+		doc = upsert_index(self.site.name, jti, log_kind="doc", employee="x@example.com", added_lines=1)
+
+		frappe.set_user("Administrator")
+		download_session_log(name=doc.name)
+		self.assertEqual(frappe.local.response.get("filename"), f"{jti}.doc.log")
 
 	def test_traversal_via_host_is_rejected(self):
 		# os.path.basename() already neutralizes "../../etc" -> "etc" (stays
@@ -370,15 +477,15 @@ class TestLogServing(HubTestCase):
 			path_for("..", "..")
 
 	def test_traversal_via_jti_is_rejected(self):
-		# jti gets a literal ".jsonl" suffix appended after basename(), which
-		# defangs a literal ".." (it becomes the filename "...jsonl", not a
+		# jti gets a literal ".log" suffix appended after basename(), which
+		# defangs a literal ".." (it becomes the filename "....log", not a
 		# parent-dir reference) - so the jti axis can't reach outside
 		# base_dir even without _safe_join. Exercise a case where the ".."
 		# is only defanged by the suffix, and confirm it resolves safely
 		# inside base_dir rather than raising (there's nothing to reject).
 		p = path_for(self.site.name, "..")
 		self.assertTrue(p.startswith(base_dir()))
-		self.assertEqual(os.path.basename(p), "...jsonl")
+		self.assertEqual(os.path.basename(p), "...log")
 
 	def test_traversal_attempt_is_neutralized_not_just_rejected(self):
 		# Even when basename() reduces a traversal-looking value to something
@@ -386,7 +493,7 @@ class TestLogServing(HubTestCase):
 		# base_dir, never actually escaping it.
 		p = path_for(self.site.name, "../../../etc/passwd")
 		self.assertTrue(p.startswith(base_dir()))
-		self.assertEqual(os.path.basename(p), "passwd.jsonl")
+		self.assertEqual(os.path.basename(p), "passwd.log")
 
 	def test_resolved_paths_stay_inside_base_dir(self):
 		p = path_for(self.site.name, "some-jti")
@@ -555,7 +662,8 @@ class TestIngestEndpointsOverRealHttp(HubTestCase):
 			+ self.jti.encode()
 			+ b'","host":"'
 			+ self.host.encode()
-			+ b'","session_meta":{"emp_email":"x@example.com"},"ndjson":"{\\"a\\":1}"}'
+			+ b'","log_kind":"request","session_meta":{"emp_email":"x@example.com"},'
+			+ b'"lines":"ts=1 path=x"}'
 		)
 		resp = self._post("access_hub.api.push_logs", body, token=self.plaintext_token)
 		self.assertEqual(resp.status_code, 200)
@@ -573,6 +681,11 @@ class TestIngestEndpointsOverRealHttp(HubTestCase):
 			+ b'","event":"created","user":"x@example.com","ts":"2026-01-01T00:00:00"}'
 		)
 		resp = self._post("access_hub.api.report_provisioning", body, token=self.plaintext_token)
+		self.assertEqual(resp.status_code, 200)
+
+	def test_report_session_event_over_http_with_typed_params(self):
+		body = b'{"pv":1,"jti":"' + self.jti.encode() + b'","event":"logout","reason":"user_logout"}'
+		resp = self._post("access_hub.api.report_session_event", body, token=self.plaintext_token)
 		self.assertEqual(resp.status_code, 200)
 
 	def test_pv_mismatch_over_http_returns_426(self):

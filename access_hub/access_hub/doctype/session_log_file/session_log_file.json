@@ -7,6 +7,7 @@
  "field_order": [
   "remote_site",
   "jti",
+  "log_kind",
   "employee",
   "date",
   "path",
@@ -29,8 +30,18 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "JTI",
-   "reqd": 1,
-   "unique": 1
+   "reqd": 1
+  },
+  {
+   "default": "request",
+   "description": "One row per (jti, log_kind) — a session gets a separate row for its request log and its doc-change log.",
+   "fieldname": "log_kind",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Log Kind",
+   "options": "request\ndoc",
+   "reqd": 1
   },
   {
    "fieldname": "employee",

@@ -41,6 +41,9 @@ def create_and_mint(employee: str, remote_site: str) -> tuple["AccessGrant", str
 		{
 			"doctype": "Access Grant",
 			"employee": employee,
+			# Snapshotted, not fetch_from: must survive `employee`'s User being
+			# deleted later (see Access Grant.emp_email description).
+			"emp_email": user.email or user.name,
 			"remote_site": remote_site,
 			"jti": jti,
 			"status": "Issued",
@@ -67,3 +70,22 @@ def build_accept_url(remote_site: str, token: str) -> str:
 	site = frappe.get_doc("Remote Site", remote_site)
 	base = f"{site.protocol}://{site.host}:{site.port}"
 	return f"{base}/api/method/access_guard.api.accept?token={token}"
+
+
+def record_session_event(jti: str, event: str, reason: str | None = None) -> None:
+	"""Applies a guard-reported session event to its Access Grant. Unknown
+	jti is a no-op — the grant may already be reaped by the time this lands."""
+	if not frappe.db.exists("Access Grant", jti):
+		return
+	grant = frappe.get_doc("Access Grant", jti)
+	if event in ("accepted", "login"):
+		grant.status = "Active"
+		if not grant.start_time:
+			grant.start_time = now_datetime()
+	elif event == "logout":
+		grant.status = "Ended"
+		grant.end_time = now_datetime()
+		grant.logout_reason = reason
+	else:
+		return
+	grant.save(ignore_permissions=True)

@@ -1,17 +1,22 @@
 {
  "actions": [],
- "autoname": "hash",
+ "autoname": "field:jti",
  "creation": "2026-01-01 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "employee",
   "employee_name",
+  "emp_email",
   "remote_site",
   "jti",
   "status",
   "issued_at",
-  "expires_at"
+  "expires_at",
+  "session_section",
+  "start_time",
+  "end_time",
+  "logout_reason"
  ],
  "fields": [
   {
@@ -32,6 +37,15 @@
    "read_only": 1
   },
   {
+   "description": "Snapshotted at mint time (not fetch_from) so it survives the linked User being deleted later — used to keep evicting a removed user even after their User record is gone.",
+   "fieldname": "emp_email",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Employee Email",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
    "fieldname": "remote_site",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -50,12 +64,13 @@
   },
   {
    "default": "Issued",
+   "description": "Issued: minted, not yet redeemed. Active: guard accepted it, session live. Ended: session torn down (see Logout Reason). A guard that can't reach the hub may leave this stale rather than wrong - there's no cron flipping states here.",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Issued\nExpired",
+   "options": "Issued\nActive\nEnded",
    "read_only": 1
   },
   {
@@ -70,9 +85,41 @@
    "fieldtype": "Datetime",
    "label": "Expires At (URL redemption deadline)",
    "read_only": 1
+  },
+  {
+   "fieldname": "session_section",
+   "fieldtype": "Section Break",
+   "label": "Session"
+  },
+  {
+   "description": "Set when the guard reports this grant's session as started (accepted/logged in).",
+   "fieldname": "start_time",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Start Time",
+   "read_only": 1
+  },
+  {
+   "description": "Set when the guard reports this grant's session as ended.",
+   "fieldname": "end_time",
+   "fieldtype": "Datetime",
+   "label": "End Time",
+   "read_only": 1
+  },
+  {
+   "fieldname": "logout_reason",
+   "fieldtype": "Data",
+   "label": "Logout Reason",
+   "read_only": 1
   }
  ],
- "links": [],
+ "links": [
+  {
+   "group": "Logs",
+   "link_doctype": "Session Log File",
+   "link_fieldname": "jti"
+  }
+ ],
  "modified": "2026-01-01 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Access Hub",

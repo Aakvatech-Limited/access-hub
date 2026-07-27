@@ -81,13 +81,16 @@ limit); it's reaped automatically ~15 min after going idle, and on logout.
 
 ## 5. View audit logs (hub side)
 
-Client sites push per-session logs to the hub hourly. On the hub:
+On the hub:
 
-- **Session Log** — one row per session (client, employee, jti, start/end, logout
-  reason).
-- **Session Log File** — the pushed `.jsonl` per session; open a record to view or
-  download the line-by-line activity log. Served safely (path-traversal-guarded),
-  System Manager only.
+- **Access Grant** — one row per grant/session (client, employee, jti); start
+  time, end time, and logout reason are pushed here immediately by the guard as
+  they happen (accept/login/logout), not batched with the hourly sync. Its
+  Connections panel links to that session's Session Log File rows.
+- **Session Log File** — one row per (jti, log kind), synced hourly; download the
+  request log or the doc-change log for a session. Served safely
+  (path-traversal-guarded), System Manager only. Line-range viewing is deferred
+  to v2 — download-only for now.
 
 ## 6. Development / testing
 

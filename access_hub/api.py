@@ -128,10 +128,16 @@ def get_policy(site):
 
 
 @ingest_endpoint
-def push_logs(site, jti: str | None = None, host: str | None = None, session_meta=None, ndjson: str = ""):
+def push_logs(
+	site,
+	jti: str | None = None,
+	host: str | None = None,
+	log_kind: str = "request",
+	session_meta=None,
+	lines: str = "",
+):
 	import json
 
-	from access_hub.access_hub.doctype.session_log.session_log import get_or_create
 	from access_hub.access_hub.doctype.session_log_file.session_log_file import (
 		append_lines,
 		upsert_index,
@@ -139,6 +145,8 @@ def push_logs(site, jti: str | None = None, host: str | None = None, session_met
 
 	if not jti:
 		frappe.throw("jti is required.")
+	if log_kind not in ("request", "doc"):
+		frappe.throw("log_kind must be 'request' or 'doc'.")
 
 	if isinstance(session_meta, str):
 		try:
@@ -147,25 +155,33 @@ def push_logs(site, jti: str | None = None, host: str | None = None, session_met
 			session_meta = {}
 	session_meta = session_meta or {}
 
-	get_or_create(jti, site.name, session_meta)
-
-	added = append_lines(site.name, jti, ndjson or "")
+	added = append_lines(site.name, jti, log_kind, lines or "")
 	upsert_index(
 		site.name,
 		jti,
+		log_kind=log_kind,
 		employee=session_meta.get("employee") or session_meta.get("emp_email"),
 		added_lines=added,
 	)
 
-	if session_meta.get("end_time") or session_meta.get("logout_reason"):
-		log = frappe.get_doc("Session Log", jti)
-		if session_meta.get("end_time"):
-			log.end_time = session_meta["end_time"]
-		if session_meta.get("logout_reason"):
-			log.logout_reason = session_meta["logout_reason"]
-		log.save(ignore_permissions=True)
-
 	return {"ok": True, "received_lines": added}
+
+
+@ingest_endpoint
+def report_session_event(site, jti: str | None = None, event: str | None = None, reason: str | None = None):
+	"""Immediate (not hourly-batched) push of a session lifecycle event —
+	accepted/login/logout — straight onto the matching Access Grant. Called
+	right alongside access_guard.logging_.log_session_event, so the hub's
+	view of "is this grant's session live" is near-real-time rather than
+	waiting for the next hourly activity-log sync. Always on: there is no
+	policy opt-out for this, unlike log_sync_enabled (which only gates the
+	bulkier activity-log/announce/retention path)."""
+	from access_hub.access_hub.doctype.access_grant.access_grant import record_session_event
+
+	if not jti or not event:
+		frappe.throw("jti and event are required.")
+	record_session_event(jti, event, reason)
+	return {"ok": True}
 
 
 @ingest_endpoint
@@ -205,35 +221,17 @@ def report_provisioning(
 
 
 @frappe.whitelist()
-def get_session_log_lines(name: str, start: int = 0, end: int | None = None):
-	"""Serve a slice of a pushed session log by its Session Log File `name` —
-	never a client-supplied path; path_for()'s traversal guard resolves the
-	canonical on-disk path from remote_site+jti. Gated on the Session Log
-	File doctype's own "read" permission (its permissions block currently
-	scopes that to System Manager) rather than a hardcoded role check, so
-	granting a future custom role read access there is enough — no code
-	change needed here. Supports line-range partial views for very large
-	files (DESIGN.md)."""
-	frappe.has_permission("Session Log File", "read", doc=name, throw=True)
-
-	from access_hub.access_hub.doctype.session_log_file.session_log_file import read_lines
-
-	start = int(start) if start is not None else 0
-	end = int(end) if end is not None else None
-	return {"lines": read_lines(name, start=start, end=end)}
-
-
-@frappe.whitelist()
 def download_session_log(name: str):
 	"""Serve the full session log file (by Session Log File `name`, never a
 	client-supplied path) as a download. Gated on the Session Log File
-	doctype's own "read" permission — see get_session_log_lines()."""
+	doctype's own "read" permission (System Manager). Line-range viewing is
+	deferred to v2 — download-only for now."""
 	frappe.has_permission("Session Log File", "read", doc=name, throw=True)
 
 	from access_hub.access_hub.doctype.session_log_file.session_log_file import path_for
 
 	doc = frappe.get_doc("Session Log File", name)
-	path = path_for(doc.remote_site, doc.jti)
+	path = path_for(doc.remote_site, doc.jti, doc.log_kind)
 
 	if not os.path.exists(path):
 		frappe.throw("Log file not found on disk.")
@@ -241,6 +239,7 @@ def download_session_log(name: str):
 	with open(path, "rb") as f:
 		content = f.read()
 
-	frappe.local.response.filename = f"{doc.jti}.jsonl"
+	suffix = ".doc.log" if doc.log_kind == "doc" else ".log"
+	frappe.local.response.filename = f"{doc.jti}{suffix}"
 	frappe.local.response.filecontent = content
 	frappe.local.response.type = "download"
