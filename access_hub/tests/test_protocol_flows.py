@@ -357,7 +357,9 @@ class TestRequestAccessAttribution(HubTestCase):
 	def setUp(self):
 		self.site = self.make_remote_site(f"test-reqacc-{self._testMethodName}.localhost")
 		self.caller_email = f"caller-{self._testMethodName}@example.com"
-		self.make_user(self.caller_email, first_name="Caller")
+		caller = self.make_user(self.caller_email, first_name="Caller")
+		# Desk User gets read-only on Remote Site — the role that can request.
+		caller.add_roles("Desk User")
 		self.addCleanup(frappe.set_user, "Administrator")
 
 	def test_request_access_has_no_employee_override_param(self):

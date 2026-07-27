@@ -86,6 +86,14 @@
    "role": "System Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Desk User"
+  },
+  {
+   "read": 1,
+   "role": "Agent"
   }
  ],
  "show_title_field_in_link": 1,

@@ -38,36 +38,26 @@ def get_hub_enrollment_info():
 
 
 @frappe.whitelist()
-def list_remote_sites():
-	"""List Remote Sites for the Request Access UI.
-
-	Deliberately NOT gated on the Remote Site doctype's own permissions
-	(System Manager only, for its CRUD/admin surface) — per DESIGN.md, any
-	employee clicks "Request access" for themselves; this is the read-only
-	site-picker backing that flow, not the Remote Site admin list. `@frappe.
-	whitelist()` without `allow_guest=True` already requires a real logged-in
-	user (frappe.session.user not Guest). Response is intentionally minimal
-	(no transport token / hash / any secret)."""
-	return frappe.get_all(
-		"Remote Site", fields=["name", "host", "port", "protocol", "is_fc_site"], order_by="host"
-	)
-
-
-@frappe.whitelist()
 def request_access(remote_site: str):
 	"""Mint a grant token for the current session user against `remote_site`,
 	and return the guard accept URL the browser should be redirected to.
-	PROTOCOL §3.
+	PROTOCOL §3. Backs the "Request Access" button on the Remote Site form.
 
 	Always mints for frappe.session.user — there is deliberately no
 	`employee=` override. v1 has no approval step (DESIGN.md), and the whole
 	point is attribution: an employee requests access for themselves, and it
 	is logged as them. Letting any caller pass an arbitrary `employee` would
-	let them mint a grant attributed to someone else's identity."""
+	let them mint a grant attributed to someone else's identity.
+
+	Gated on the caller's own "read" permission for this Remote Site — the
+	site is only requestable if their role can see it (Desk User / Agent get
+	read-only). This never grants write, so it cannot rotate the token."""
 	from access_hub.access_hub.doctype.access_grant.access_grant import (
 		build_accept_url,
 		create_and_mint,
 	)
+
+	frappe.has_permission("Remote Site", "read", doc=remote_site, throw=True)
 
 	employee = frappe.session.user
 	if employee in ("Administrator", "Guest"):

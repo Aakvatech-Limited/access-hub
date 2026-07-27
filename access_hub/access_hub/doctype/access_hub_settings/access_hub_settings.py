@@ -120,9 +120,11 @@ def after_install():
 	"""Make the hub usable out of the box: generate the signing keypair if
 	absent, and seed the Access Hub Settings Single with the protocol's default
 	deny rule. Both steps are idempotent."""
+	from access_hub.setup import after_migrate as run_app_setup
 	from access_hub.utils.crypto import ensure_keypair
 
 	ensure_keypair()
+	run_app_setup()  # helpdesk-conditional custom field etc.
 
 	settings = frappe.get_single("Access Hub Settings")
 	if settings.rules:
