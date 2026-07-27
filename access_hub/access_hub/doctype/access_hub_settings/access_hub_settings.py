@@ -16,6 +16,7 @@ from access_hub.protocol import (
 	POLICY_SESSION_EXPIRY_SECONDS,
 	POLICY_SYNC_ENABLED,
 	PV,
+	ClientNotConfiguredError,
 )
 from access_hub.utils.crypto import sign_paseto
 
@@ -30,7 +31,13 @@ class AccessHubSettings(Document):
 				frappe.throw("Each rule row needs a Document Type.")
 
 	def on_update(self):
-		token = self.build_and_sign_policy_token()
+		# Before the keypair exists (e.g. right after install seeds defaults) we
+		# can't sign yet. Leave the token empty; get_current_policy_token() builds
+		# it lazily on first fetch, once `bench access-hub-generate-keypair` has run.
+		try:
+			token = self.build_and_sign_policy_token()
+		except ClientNotConfiguredError:
+			return
 		frappe.db.set_value(self.doctype, self.name, "current_policy_token", token, update_modified=False)
 		if self.sync_enabled:
 			push_policy_to_all_sites(token)
