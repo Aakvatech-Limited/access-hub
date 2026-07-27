@@ -56,18 +56,20 @@ def rotate_transport_token(remote_site: str, token: str | None = None) -> dict:
 	return doc.enrollment_config(plaintext)
 
 
-def announce(host: str, port: int | None = None, protocol: str | None = None, app_version: str | None = None):
-	"""Upsert a Remote Site row from a client's announce payload.
+def announce(
+	remote_site: str, port: int | None = None, protocol: str | None = None, app_version: str | None = None
+):
+	"""Update a Remote Site's announce metadata.
 
-	Called by the ingest endpoint (already transport-token authenticated), so
-	`host` here is the Remote Site matched by that authentication — this only
-	updates metadata (port/protocol/app_version/last_announced_on), never the
-	token/hash.
+	Called by the ingest endpoint with the Remote Site name matched by transport
+	-token auth (not the payload host — host is now just a mutable title field,
+	no longer the doc name). Updates port/protocol/app_version/last_announced_on
+	only, never the token/hash.
 	"""
-	if not frappe.db.exists("Remote Site", host):
-		frappe.throw(f"Unknown Remote Site: {host}")
+	if not frappe.db.exists("Remote Site", remote_site):
+		frappe.throw(f"Unknown Remote Site: {remote_site}")
 
-	doc = frappe.get_doc("Remote Site", host)
+	doc = frappe.get_doc("Remote Site", remote_site)
 	if port:
 		doc.port = port
 	if protocol:

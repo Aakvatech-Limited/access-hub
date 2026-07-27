@@ -63,7 +63,6 @@ class HubTestCase(FrappeTestCase):
 				"host": host,
 				"port": 8005,
 				"protocol": "http",
-				"enrollment_type": "manual",
 				**fields,
 			}
 		)
@@ -72,12 +71,13 @@ class HubTestCase(FrappeTestCase):
 		if transport_token is not None:
 			site._apply_token(transport_token)
 		site.insert(ignore_permissions=True)
-		self.addCleanup(self._delete_remote_site, host)
+		# name is a hash now (autoname), not the host — clean up by name.
+		self.addCleanup(self._delete_remote_site, site.name)
 		return site
 
 	@staticmethod
-	def _delete_remote_site(host):
-		frappe.delete_doc("Remote Site", host, ignore_permissions=True, force=True)
+	def _delete_remote_site(name):
+		frappe.delete_doc("Remote Site", name, ignore_permissions=True, force=True)
 		frappe.db.commit()
 
 	def make_user(self, email, **fields):
@@ -407,8 +407,9 @@ class TestIngestEndpointsOverRealHttp(HubTestCase):
 		self.plaintext_token = "http-regression-transport-token-1"
 		self.host = f"test-http-{self._testMethodName}.localhost"
 		self.jti = f"http-test-{self._testMethodName}-jti"
-		self.make_remote_site(self.host, transport_token=self.plaintext_token)
-		self.register_log_file_cleanup(self.host, self.jti)
+		self.site = self.make_remote_site(self.host, transport_token=self.plaintext_token)
+		# logs are keyed by Remote Site name (a hash), not host — clean up by name.
+		self.register_log_file_cleanup(self.site.name, self.jti)
 		# Make the Remote Site visible to the second DB connection the HTTP
 		# request below will open.
 		frappe.db.commit()

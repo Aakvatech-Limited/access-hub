@@ -1,6 +1,6 @@
 {
  "actions": [],
- "autoname": "field:host",
+ "autoname": "hash",
  "creation": "2026-01-01 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -8,7 +8,7 @@
   "host",
   "port",
   "protocol",
-  "enrollment_type",
+  "is_fc_site",
   "transport_token_hash",
   "app_version",
   "last_announced_on"
@@ -42,12 +42,11 @@
    "reqd": 1
   },
   {
-   "default": "manual",
-   "fieldname": "enrollment_type",
-   "fieldtype": "Select",
-   "label": "Enrollment Type",
-   "options": "manual\nfc",
-   "reqd": 1
+   "default": "0",
+   "description": "Site is managed via Frappe Cloud (enrollment automated).",
+   "fieldname": "is_fc_site",
+   "fieldtype": "Check",
+   "label": "Is FC Site"
   },
   {
    "description": "SHA-256 of the transport token. The plaintext is shown once at creation/rotation and never stored.",
@@ -89,7 +88,9 @@
    "write": 1
   }
  ],
+ "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
+ "title_field": "host",
  "track_changes": 1
 }

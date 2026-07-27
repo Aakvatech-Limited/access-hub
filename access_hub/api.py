@@ -49,7 +49,7 @@ def list_remote_sites():
 	user (frappe.session.user not Guest). Response is intentionally minimal
 	(no transport token / hash / any secret)."""
 	return frappe.get_all(
-		"Remote Site", fields=["name", "host", "port", "protocol", "enrollment_type"], order_by="host"
+		"Remote Site", fields=["name", "host", "port", "protocol", "is_fc_site"], order_by="host"
 	)
 
 
