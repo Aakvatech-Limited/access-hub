@@ -57,8 +57,8 @@ PASETO `v4.public`, signed with the hub private key. Claims:
 
 | claim | source | notes |
 |---|---|---|
-| `emp_name` | employee full name | custom |
-| `emp_email` | employee email | custom; becomes the ephemeral user id |
+| `user_name` | user full name | custom |
+| `user_email` | user email | custom; becomes the ephemeral user id |
 | `aud` | `transport_token_hash(client token)` | registered; verified on accept |
 | `iat` | now | registered (ISO-8601) |
 | `exp` | `iat + ~2m` | registered; **URL redemption deadline**, not session length |
@@ -75,7 +75,7 @@ PASETO `v4.public`, signed with the hub private key. Claims:
 4. `exp` (allow `CLOCK_SKEW_LEEWAY_SECONDS`) → `TokenExpiredError`
 5. `aud == transport_token_hash(local token)` → `TokenAudienceError`
 6. `jti` not in used set → `TokenReplayError`; then mark used.
-7. resolve ephemeral user for `emp_email`: create if absent, or reuse **only** if the email already
+7. resolve ephemeral user for `user_email`: create if absent, or reuse **only** if the email already
    belongs to an ephemeral user. If it belongs to a **standing (non-ephemeral)** existing user →
    `EphemeralUserCollisionError`, no session started. Ephemeral membership is grant-file-derived
    (`ephemeral_users()` = every `user` named in a grant file), never a DB flag.
@@ -149,8 +149,8 @@ Authoritative for the reaper and the session guard. Never in the DB.
 ```json
 {
   "jti": "...", "pv": 1,
-  "emp_name": "...", "emp_email": "...",
-  "user": "john.doe@example.com",     // ephemeral user id (== emp_email in v1)
+  "user_name": "...", "user_email": "...",
+  "user": "john.doe@example.com",     // ephemeral user id (== user_email in v1)
   "sid": "...",                        // null at write, set at login → maps session to jti
   "issued_at": "iso",
   "effective_expiry_seconds": 21600    // policy.session_expiry_seconds at accept; the reaper

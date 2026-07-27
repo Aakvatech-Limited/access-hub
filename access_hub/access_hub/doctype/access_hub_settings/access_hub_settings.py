@@ -109,16 +109,16 @@ class AccessHubSettings(Document):
 			POLICY_BLACKLISTED_EMAILS: list(blacklisted_user_emails(self) | disabled_granted_user_emails()),
 		}
 
-	def is_blacklisted(self, employee: str) -> bool:
-		"""`employee` is a User name (e.g. frappe.session.user) - blacklisted_users.user
+	def is_blacklisted(self, user: str) -> bool:
+		"""`user` is a User name (e.g. frappe.session.user) - blacklisted_users.user
 		is also a User name (a Link), so this is a direct comparison, no email
 		resolution needed (contrast as_policy_dict's POLICY_BLACKLISTED_EMAILS,
 		which is the wire protocol's email-keyed shape for the guard)."""
 		if bool(self.access_disabled):
 			return True
-		if employee in {row.user for row in self.blacklisted_users if row.user}:
+		if user in {row.user for row in self.blacklisted_users if row.user}:
 			return True
-		return not bool(frappe.db.get_value("User", employee, "enabled"))
+		return not bool(frappe.db.get_value("User", user, "enabled"))
 
 	def build_and_sign_policy_token(self) -> str:
 		policy = self.as_policy_dict()
@@ -146,12 +146,12 @@ def blacklisted_user_emails(settings: "AccessHubSettings") -> set[str]:
 
 def disabled_granted_user_emails() -> set[str]:
 	"""Emails ever granted access, minus emails of currently-enabled Users.
-	All in email-space (g.emp_email is a snapshot, not a Link) so this stays
+	All in email-space (g.user_email is a snapshot, not a Link) so this stays
 	correct even if User.name stops being the email (e.g. a future UUID
 	naming scheme). Derived live, not stored - re-enabling the User clears
 	it automatically."""
 	granted = frappe.get_all(
-		"Access Grant", filters={"emp_email": ["is", "set"]}, pluck="emp_email", distinct=True
+		"Access Grant", filters={"user_email": ["is", "set"]}, pluck="user_email", distinct=True
 	)
 	if not granted:
 		return set()

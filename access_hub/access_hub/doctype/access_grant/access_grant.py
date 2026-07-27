@@ -9,10 +9,10 @@ from frappe.utils import add_to_date, now_datetime
 
 from access_hub.constants import GRANT_TTL_SECONDS_DEFAULT
 from access_hub.protocol import (
-	CLAIM_EMP_EMAIL,
-	CLAIM_EMP_NAME,
 	CLAIM_JTI,
 	CLAIM_PV,
+	CLAIM_USER_EMAIL,
+	CLAIM_USER_NAME,
 	PV,
 )
 from access_hub.utils.crypto import sign_paseto
@@ -22,8 +22,8 @@ class AccessGrant(Document):
 	pass
 
 
-def create_and_mint(employee: str, site: "frappe.model.document.Document") -> tuple["AccessGrant", str]:
-	"""Create an Access Grant row for `employee` (a User) against `site` (a
+def create_and_mint(user: str, site: "frappe.model.document.Document") -> tuple["AccessGrant", str]:
+	"""Create an Access Grant row for `user` (a User) against `site` (a
 	Remote Site doc), mint its PASETO v4.public grant token per PROTOCOL §3,
 	and return (grant_doc, token).
 	"""
@@ -37,7 +37,7 @@ def create_and_mint(employee: str, site: "frappe.model.document.Document") -> tu
 	grant = frappe.get_doc(
 		{
 			"doctype": "Access Grant",
-			"employee": employee,
+			"user": user,
 			"remote_site": site.name,
 			"jti": jti,
 			"status": "Issued",
@@ -45,13 +45,13 @@ def create_and_mint(employee: str, site: "frappe.model.document.Document") -> tu
 			"expires_at": expires_at,
 		}
 	)
-	# employee_name/emp_email are fetch_from - insert() populates them from the
+	# user_name/user_email are fetch_from - insert() populates them from the
 	# linked User, no separate lookup needed here.
 	grant.insert(ignore_permissions=True)
 
 	claims = {
-		CLAIM_EMP_NAME: grant.employee_name,
-		CLAIM_EMP_EMAIL: grant.emp_email,
+		CLAIM_USER_NAME: grant.user_name,
+		CLAIM_USER_EMAIL: grant.user_email,
 		"aud": site.transport_token_hash,
 		CLAIM_JTI: jti,
 		CLAIM_PV: PV,

@@ -133,13 +133,13 @@ class TestKeypairAndGrantMinting(HubTestCase):
 
 		self.assertEqual(grant.status, "Issued")
 		self.assertTrue(grant.jti)
-		self.assertEqual(grant.emp_email, user.email or user.name)
+		self.assertEqual(grant.user_email, user.email or user.name)
 
 		pub = get_public_key()
 		decoded = pyseto.decode(pub, token)
 		claims = json.loads(decoded.payload)
 
-		self.assertEqual(claims["emp_email"], user.email or user.name)
+		self.assertEqual(claims["user_email"], user.email or user.name)
 		self.assertEqual(claims["jti"], grant.jti)
 		self.assertEqual(claims["pv"], PV)
 
@@ -304,7 +304,7 @@ class TestDisabledAndDeletedUserEviction(HubTestCase):
 		site = self.make_remote_site(f"test-evict-{self._testMethodName}.localhost")
 		user = self.make_user(f"evict-disable-{self._testMethodName}@example.com", first_name="Evictee")
 		create_and_mint(user.name, site)
-		self.addCleanup(frappe.db.delete, "Access Grant", {"employee": user.name})
+		self.addCleanup(frappe.db.delete, "Access Grant", {"user": user.name})
 
 		self.assertNotIn(user.name, disabled_granted_user_emails())
 
@@ -320,7 +320,7 @@ class TestDisabledAndDeletedUserEviction(HubTestCase):
 		self.assertNotIn(user.name, disabled_granted_user_emails())
 
 	def test_deleted_user_with_grant_stays_evicted(self):
-		"""emp_email is snapshotted onto Access Grant at mint time, so eviction
+		"""user_email is snapshotted onto Access Grant at mint time, so eviction
 		survives the User row being deleted outright (not just disabled)."""
 		from access_hub.access_hub.doctype.access_grant.access_grant import create_and_mint
 		from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
@@ -331,7 +331,7 @@ class TestDisabledAndDeletedUserEviction(HubTestCase):
 		email = f"evict-delete-{self._testMethodName}@example.com"
 		user = self.make_user(email, first_name="Evictee")
 		create_and_mint(user.name, site)
-		self.addCleanup(frappe.db.delete, "Access Grant", {"emp_email": email})
+		self.addCleanup(frappe.db.delete, "Access Grant", {"user_email": email})
 
 		# force=True: mirrors a real delete of a User with linked grants.
 		frappe.delete_doc("User", email, force=True, ignore_permissions=True)
@@ -537,7 +537,7 @@ class TestLogServing(HubTestCase):
 
 class TestRequestAccessAttribution(HubTestCase):
 	"""request_access() must always mint for the calling session user - no
-	employee= override - so a grant is never attributable to anyone but the
+	user= override - so a grant is never attributable to anyone but the
 	person who actually clicked the button (DESIGN.md's no-approval-step,
 	full-attribution posture)."""
 
@@ -550,12 +550,12 @@ class TestRequestAccessAttribution(HubTestCase):
 		caller.add_roles("Desk User")
 		self.addCleanup(frappe.set_user, "Administrator")
 
-	def test_request_access_has_no_employee_override_param(self):
+	def test_request_access_has_no_user_override_param(self):
 		import inspect
 
 		from access_hub.api import request_access
 
-		self.assertNotIn("employee", inspect.signature(request_access).parameters)
+		self.assertNotIn("user", inspect.signature(request_access).parameters)
 
 	def test_request_access_mints_for_calling_user(self):
 		from access_hub.api import request_access
@@ -568,7 +568,7 @@ class TestRequestAccessAttribution(HubTestCase):
 			"Access Grant", {"remote_site": self.site.name}, "jti", order_by="creation desc"
 		)
 		grant = frappe.get_doc("Access Grant", {"jti": jti})
-		self.assertEqual(grant.employee, self.caller_email)
+		self.assertEqual(grant.user, self.caller_email)
 		self.addCleanup(frappe.delete_doc, "Access Grant", grant.name, True, None, True)
 
 

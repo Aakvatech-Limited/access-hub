@@ -6,9 +6,9 @@
  "engine": "InnoDB",
  "field_order": [
   "status",
-  "employee",
-  "employee_name",
-  "emp_email",
+  "user",
+  "user_name",
+  "user_email",
   "remote_site",
   "host",
   "jti",
@@ -23,27 +23,27 @@
  ],
  "fields": [
   {
-   "fieldname": "employee",
+   "fieldname": "user",
    "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "Employee",
+   "label": "User",
    "options": "User",
    "reqd": 1
   },
   {
-   "fetch_from": "employee.full_name",
-   "fieldname": "employee_name",
+   "fetch_from": "user.full_name",
+   "fieldname": "user_name",
    "fieldtype": "Data",
-   "label": "Employee Name",
+   "label": "User Name",
    "read_only": 1
   },
   {
-   "description": "fetch_from only runs when Employee itself changes, so this stays put even after the linked User is deleted later — used to keep evicting a removed user even after their User record is gone.",
-   "fetch_from": "employee.email",
-   "fieldname": "emp_email",
+   "description": "fetch_from only runs when User itself changes, so this stays put even after the linked User is deleted later — used to keep evicting a removed user even after their User record is gone.",
+   "fetch_from": "user.email",
+   "fieldname": "user_email",
    "fieldtype": "Data",
    "hidden": 1,
-   "label": "Employee Email",
+   "label": "User Email",
    "read_only": 1,
    "search_index": 1
   },
@@ -156,6 +156,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
- "title_field": "employee_name",
+ "title_field": "user_name",
  "track_changes": 1
 }

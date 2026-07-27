@@ -18,7 +18,7 @@ doc_events = {
 }
 
 # Access Grant deliberately keeps a dangling Link to a deleted User (the
-# audit trail must survive the employee being removed / their email
+# audit trail must survive the user being removed / their email
 # changing) - so a User delete must not be blocked by, or cascade to,
 # Access Grant rows referencing it.
 ignore_links_on_delete = ["Access Grant"]

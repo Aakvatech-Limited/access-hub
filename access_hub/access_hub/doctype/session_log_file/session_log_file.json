@@ -8,7 +8,7 @@
   "remote_site",
   "jti",
   "log_kind",
-  "employee",
+  "user_email",
   "date",
   "path",
   "size_bytes",
@@ -44,10 +44,10 @@
    "reqd": 1
   },
   {
-   "fieldname": "employee",
+   "fieldname": "user_email",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Employee Email"
+   "label": "User Email"
   },
   {
    "fieldname": "date",

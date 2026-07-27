@@ -61,7 +61,7 @@ def append_lines(remote_site: str, jti: str, log_kind: str, lines_text: str) -> 
 
 def upsert_index(remote_site: str, jti: str, log_kind: str = "request", added_lines: int = 0):
 	"""One row per (jti, log_kind) — a session's request log and doc-change
-	log are tracked (and downloadable) independently. employee is read from
+	log are tracked (and downloadable) independently. user_email is read from
 	the matching Access Grant (the hub's own record), not sent by the guard -
 	jti is already the key needed to look it up."""
 	base = base_dir()
@@ -88,7 +88,7 @@ def upsert_index(remote_site: str, jti: str, log_kind: str = "request", added_li
 			}
 		)
 
-	if not doc.employee:
-		doc.employee = frappe.db.get_value("Access Grant", jti, "emp_email")
+	if not doc.user_email:
+		doc.user_email = frappe.db.get_value("Access Grant", jti, "user_email")
 	doc.save(ignore_permissions=True)
 	return doc

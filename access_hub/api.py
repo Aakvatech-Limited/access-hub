@@ -22,9 +22,9 @@ def request_access(remote_site: str):
 	PROTOCOL §3. Backs the "Request Access" button on the Remote Site form.
 
 	Always mints for frappe.session.user — there is deliberately no
-	`employee=` override. v1 has no approval step (DESIGN.md), and the whole
-	point is attribution: an employee requests access for themselves, and it
-	is logged as them. Letting any caller pass an arbitrary `employee` would
+	`user=` override. v1 has no approval step (DESIGN.md), and the whole
+	point is attribution: a user requests access for themselves, and it
+	is logged as them. Letting any caller pass an arbitrary `user` would
 	let them mint a grant attributed to someone else's identity.
 
 	Gated on the caller's own "read" permission for this Remote Site — the
@@ -35,15 +35,15 @@ def request_access(remote_site: str):
 	site = frappe.get_doc("Remote Site", remote_site)
 	site.check_permission("read")
 
-	employee = frappe.session.user
-	if employee in ("Administrator", "Guest"):
+	user = frappe.session.user
+	if user in ("Administrator", "Guest"):
 		frappe.throw("Please request access as a named user, not Administrator/Guest.")
 
 	settings = frappe.get_single("Access Hub Settings")
-	if settings.is_blacklisted(employee):
+	if settings.is_blacklisted(user):
 		frappe.throw("Access is currently disabled for this account.")
 
-	_grant, token = create_and_mint(employee, site)
+	_grant, token = create_and_mint(user, site)
 	return {"redirect_url": site.build_accept_url(token)}
 
 
