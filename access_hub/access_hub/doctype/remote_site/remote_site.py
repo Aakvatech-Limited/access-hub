@@ -26,8 +26,10 @@ class RemoteSite(Document):
 			self.set_onload("transport_token_config", self.get_enrollment_config(plaintext))
 
 	def validate(self):
-		# Fresh doc with no token yet: autogenerate one so the row is usable out
-		# of the box. Only the hash is stored.
+		# New doc with no token yet: autogenerate one so the row is usable out of
+		# the box. `no_copy` on transport_token_hash means a copied doc arrives
+		# here new with a blank hash, so this covers the copy case too. A token
+		# deliberately pre-applied on a new doc (rotate-on-create) is kept.
 		if self.is_new() and not self.transport_token_hash:
 			self._apply_token(secrets.token_urlsafe(32))
 

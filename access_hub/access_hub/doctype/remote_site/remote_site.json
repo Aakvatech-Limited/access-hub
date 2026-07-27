@@ -42,17 +42,18 @@
   },
   {
    "default": "0",
-   "description": "Site is managed via Frappe Cloud (enrollment automated).",
+   "description": "Site is managed via Frappe Cloud",
    "fieldname": "is_fc_site",
    "fieldtype": "Check",
    "label": "Is FC Site"
   },
   {
-   "description": "SHA-256 of the transport token; plaintext never stored.",
+   "description": "SHA-256 of the transport token",
    "fieldname": "transport_token_hash",
    "fieldtype": "Data",
    "hidden": 1,
    "label": "Transport Token Hash",
+   "no_copy": 1,
    "read_only": 1
   },
   {
@@ -63,12 +64,14 @@
    "fieldname": "app_version",
    "fieldtype": "Data",
    "label": "Guard App Version",
+   "no_copy": 1,
    "read_only": 1
   },
   {
    "fieldname": "last_announced_on",
    "fieldtype": "Datetime",
    "label": "Last Announced On",
+   "no_copy": 1,
    "read_only": 1
   }
  ],
