@@ -71,13 +71,13 @@ def request_access(remote_site: str):
 @frappe.whitelist()
 def ticket_sites_url(customer: str | None = None) -> str | None:
 	"""URL of the Remote Site list filtered to `customer`, for the Helpdesk
-	ticket "Access Sites" button. Returns None when the user can't read Remote
-	Site (button then hides), so the button never builds a desk path client-side
-	— the route is owned here, not hardcoded in the form script."""
-	if not frappe.has_permission("Remote Site", "read"):
+	ticket "Access Sites" button. Returns None (button hides) unless there is a
+	customer AND the user can read Remote Site — both gates enforced here, so
+	the form script owns no policy and no desk path."""
+	customer = (customer or "").strip()
+	if not customer or not frappe.has_permission("Remote Site", "read"):
 		return None
-	list_url = frappe.utils.get_url_to_list("Remote Site")
-	return f"{list_url}?customer={quote(customer)}" if customer else list_url
+	return f"{frappe.utils.get_url_to_list('Remote Site')}?customer={quote(customer)}"
 
 
 # --- Ingest endpoints (PROTOCOL §5) -----------------------------------------
