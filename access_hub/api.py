@@ -2,6 +2,7 @@
 
 import os
 from functools import wraps
+from urllib.parse import quote
 
 import frappe
 
@@ -68,10 +69,16 @@ def request_access(remote_site: str):
 
 
 @frappe.whitelist()
-def can_read_remote_site() -> bool:
-	"""Whether the current user may read Remote Site — used by the Helpdesk
-	ticket form script to decide whether to show the 'Access Sites' button."""
-	return bool(frappe.has_permission("Remote Site", "read"))
+def ticket_sites_url(customer: str | None = None) -> str | None:
+	"""URL of the Remote Site list filtered to `customer`, for the Helpdesk
+	ticket "Access Sites" button. Returns None when the user can't read Remote
+	Site (button then hides), so the button never builds a desk path client-side
+	— the route is owned here, not hardcoded in the form script."""
+	if not frappe.has_permission("Remote Site", "read"):
+		return None
+	# Desk list route for the doctype (Frappe uses the hyphenated slug under /app).
+	list_url = frappe.utils.get_url("/app/remote-site")
+	return f"{list_url}?customer={quote(customer)}" if customer else list_url
 
 
 # --- Ingest endpoints (PROTOCOL §5) -----------------------------------------

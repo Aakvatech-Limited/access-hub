@@ -13,24 +13,23 @@ _TICKET_SITES_BUTTON_SCRIPT = """
 async function setupForm({ doc, call }) {
     // Gate up front: helpdesk renders every returned action unconditionally
     // (v-bind, no per-action condition), so hide the button by not emitting it.
+    // The server owns both the permission check and the target URL — this
+    // script hardcodes no desk path.
     if (!doc.customer) return { actions: [] };
-    let canRead = false;
+    let url = null;
     try {
-        canRead = await call("access_hub.api.can_read_remote_site");
+        url = await call("access_hub.api.ticket_sites_url", { customer: doc.customer });
     } catch (e) {
-        canRead = false;
+        url = null;
     }
-    if (!canRead) return { actions: [] };
+    if (!url) return { actions: [] };
 
     return {
         actions: [
             {
                 label: "Access Sites",
                 icon: "server",
-                onClick: () => {
-                    const url = "/app/remote-site?customer=" + encodeURIComponent(doc.customer);
-                    window.open(url, "_blank");
-                },
+                onClick: () => window.open(url, "_blank"),
             },
         ],
     };
@@ -64,7 +63,8 @@ def _sync_helpdesk_customer_field():
 			"label": "Customer",
 			"fieldtype": "Link",
 			"options": "HD Customer",
-			"insert_after": "host",
+			"insert_after": "protocol",
+			"in_list_view": 1,
 			"description": "Optional link to the Helpdesk customer for this client site.",
 		},
 	)
