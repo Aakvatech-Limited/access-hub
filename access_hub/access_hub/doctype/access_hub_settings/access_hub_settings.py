@@ -174,8 +174,14 @@ def get_current_policy_token() -> str:
 	"""Return a signed policy token, cached for POLICY_TOKEN_CACHE_TTL_SECONDS so
 	the hourly pull from every guard doesn't re-sign on each request. A Settings
 	save busts this immediately (see republish_policy) - the cache TTL only
-	bounds the delay for anything that skips that path (e.g. install seeding)."""
-	token = frappe.cache.get_value(POLICY_TOKEN_CACHE_KEY)
+	bounds the delay for anything that skips that path (e.g. install seeding).
+
+	expires=True: get_value's default would cache a miss into
+	frappe.local.cache, but set_value (called with expires_in_sec, as
+	republish_policy always does) skips that cache on writes - so a miss
+	here followed by a write there would leave frappe.local.cache stuck on a
+	stale None. expires=True avoids frappe.local.cache entirely."""
+	token = frappe.cache.get_value(POLICY_TOKEN_CACHE_KEY, expires=True)
 	if token:
 		return token
 	token = frappe.get_single("Access Hub Settings").build_and_sign_policy_token()

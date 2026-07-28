@@ -313,7 +313,7 @@ recorded in the grant file at login, so `before_request`/`after_request` read
   stream skipped.
 - **Max key size (default 512 KB):** truncates the logged request body; doc-change
   lines are exempt.
-- **Session lifecycle:** grant-accepted / login / logout (+ reason) has no local
+- **Session lifecycle:** login / logout (+ reason) has no local
   file — pushed immediately to the hub's Access Grant, see below.
 
 ---

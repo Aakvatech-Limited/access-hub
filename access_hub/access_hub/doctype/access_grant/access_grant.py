@@ -74,7 +74,7 @@ def record_session_event(jti: str, event: str, reason: str | None = None) -> Non
 	if not frappe.db.exists("Access Grant", jti):
 		return
 	grant = frappe.get_doc("Access Grant", jti)
-	if event in ("accepted", "login"):
+	if event == "login":
 		grant.status = "Active"
 		if not grant.start_time:
 			grant.start_time = now_datetime()

@@ -182,10 +182,10 @@ class TestSessionLifecycleEvents(HubTestCase):
 		self.user = self.make_user(f"session-event-{self._testMethodName}@example.com")
 		self.jti = decode_claims(create_and_mint(self.user.name, self.site))["jti"]
 
-	def test_accepted_and_login_set_active_and_start_time(self):
+	def test_login_sets_active_and_start_time(self):
 		from access_hub.access_hub.doctype.access_grant.access_grant import record_session_event
 
-		record_session_event(self.jti, "accepted")
+		record_session_event(self.jti, "login")
 		grant = frappe.get_doc("Access Grant", self.jti)
 		self.assertEqual(grant.status, "Active")
 		self.assertTrue(grant.start_time)
@@ -194,7 +194,7 @@ class TestSessionLifecycleEvents(HubTestCase):
 		record_session_event(self.jti, "login")
 		grant.reload()
 		self.assertEqual(grant.status, "Active")
-		self.assertEqual(grant.start_time, first_start_time, "start_time must not move on a later event")
+		self.assertEqual(grant.start_time, first_start_time, "start_time must not move on a repeated event")
 
 	def test_logout_sets_ended_end_time_and_reason(self):
 		from access_hub.access_hub.doctype.access_grant.access_grant import record_session_event

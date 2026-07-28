@@ -129,7 +129,7 @@ The matched Remote Site (not any payload field) is what identifies the client to
 |---|---|---|
 | `access_hub.api.get_policy` | — | `{ "policy_token": "<paseto>" }` |
 | `access_hub.api.push_logs` | `{ jti, log_kind: "request"\|"doc", lines }` | `{ ok, received_lines }` |
-| `access_hub.api.report_session_event` | `{ jti, event: "accepted"\|"login"\|"logout", reason }` | `{ ok }` |
+| `access_hub.api.report_session_event` | `{ jti, event: "login"\|"logout", reason }` | `{ ok }` |
 
 `report_session_event` is called immediately (not batched with the hourly
 `push_logs`) — always on, no policy opt-out — so the hub's Access Grant reflects
@@ -144,19 +144,21 @@ session start/end in near-real-time.
 All error responses use `AccessProtocolError.as_response()` →
 `{ "error": { "code", "pv", "message" } }` with the class's `http_status`.
 
-## 6. Grant file (`site/private/access_guard/grants/<jti>.json`)
+## 6. Grant file (`site/private/access_guard/grants.json`)
 
-Authoritative for the reaper and the session guard. Never in the DB.
+Authoritative for the reaper and the session guard. Never in the DB. One shared
+file, keyed by jti (`{jti: record, ...}`) — not one file per grant.
 
 ```json
 {
   "jti": "...", "pv": 1,
   "user_name": "...", "user_email": "...",
   "user": "john.doe@example.com",     // ephemeral user id (== user_email in v1)
-  "sid": "...",                        // null at write, set at login → maps session to jti
+  "sid": "...",                        // written already-set, after login (maps session to jti)
   "issued_at": "iso",
   "effective_expiry_seconds": 21600    // policy.session_expiry_seconds at accept; the reaper
-                                       // idles out at min(this, site System Settings expiry)
+                                       // idles out at this value alone (Frappe's own site-wide
+                                       // session_expiry is enforced separately, per-request)
 }
 ```
 
@@ -168,7 +170,7 @@ Authoritative for the reaper and the session guard. Never in the DB.
 
 Two files per session (jti) — no per-line type/jti/sid, since the filename already identifies
 both. logfmt lines (`key=value`, space-separated; a value containing whitespace is JSON-quoted).
-Session lifecycle (accepted/login/logout) has no local file — see `report_session_event` (§5).
+Session lifecycle (login/logout) has no local file — see `report_session_event` (§5).
 
 ```
 # <jti>.log — one line per whitelisted call, written once from after_request
