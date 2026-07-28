@@ -9,9 +9,9 @@
   "mode",
   "action_create",
   "action_write",
-  "action_delete",
   "action_submit",
   "action_cancel",
+  "action_delete",
   "action_rename"
  ],
  "fields": [
