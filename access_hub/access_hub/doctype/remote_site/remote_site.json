@@ -1,14 +1,15 @@
 {
  "actions": [],
  "autoname": "hash",
- "creation": "2026-01-01 00:00:00.000000",
+ "creation": "2026-01-01 00:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "host",
+  "is_fc_site",
+  "column_break_pyri",
   "port",
   "protocol",
-  "is_fc_site",
   "transport_token_hash"
  ],
  "fields": [
@@ -52,10 +53,14 @@
    "no_copy": 1,
    "read_only": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "column_break_pyri",
+   "fieldtype": "Column Break"
   }
  ],
  "links": [],
- "modified": "2026-01-01 00:00:00.000000",
+ "modified": "2026-07-28 14:53:21.732027",
  "modified_by": "Administrator",
  "module": "Access Hub",
  "name": "Remote Site",
@@ -82,9 +87,11 @@
    "role": "Agent"
   }
  ],
+ "row_format": "Dynamic",
  "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
+ "states": [],
  "title_field": "host",
  "track_changes": 1
 }

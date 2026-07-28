@@ -1,7 +1,7 @@
 """Post-install / post-migrate setup that adapts to the site's other apps."""
 
 import frappe
-from frappe.custom.doctype.custom_field.custom_field import create_custom_field
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 HD_FORM_SCRIPT_NAME = "Access Hub - Ticket Sites Button"
 
@@ -66,19 +66,21 @@ def _sync_helpdesk_customer_field():
 	"""When Frappe Helpdesk is on the site, link a Remote Site to its HD
 	Customer. System-generated custom field, optional — a hub-only convenience
 	that ties a client site to its helpdesk customer record."""
-	if frappe.db.exists("Custom Field", "Remote Site-customer"):
-		return
-
-	create_custom_field(
-		"Remote Site",
+	create_custom_fields(
 		{
-			"fieldname": "customer",
-			"label": "Helpdesk Customer",
-			"fieldtype": "Link",
-			"options": "HD Customer",
-			"insert_after": "column_break_status",
-			"in_list_view": 1,
-		},
+			"Remote Site": [
+				{
+					"label": "Helpdesk Customer",
+					"fieldname": "customer",
+					"fieldtype": "Link",
+					"options": "HD Customer",
+					"insert_after": "host",
+					"in_list_view": 1,
+					"in_standard_filter": 1,
+					"allow_in_quick_entry": 1,
+				}
+			]
+		}
 	)
 
 
