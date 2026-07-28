@@ -29,6 +29,8 @@ from access_hub.protocol import (
 	POLICY_SESSION_EXPIRY_SECONDS,
 	PV,
 	ClientNotConfiguredError,
+	utc_iso,
+	utc_now,
 )
 from access_hub.utils.crypto import sign_paseto
 
@@ -138,9 +140,11 @@ class AccessHubSettings(Document):
 		# policy) - one uniform check, no special-casing by token type. A
 		# guard re-verifies on every save-triggered push and guaranteed hourly
 		# pull, so this only bites an already-unreachable guard.
-		now = frappe.utils.now_datetime()
-		claims["iat"] = now.isoformat()
-		claims["exp"] = frappe.utils.add_to_date(now, days=POLICY_TOKEN_TTL_DAYS).isoformat()
+		# UTC-aware, not now_datetime(): the guard compares exp against real
+		# UTC (see protocol.utc_iso).
+		now = utc_now()
+		claims["iat"] = utc_iso(now)
+		claims["exp"] = utc_iso(now, days=POLICY_TOKEN_TTL_DAYS)
 		return sign_paseto(claims)
 
 

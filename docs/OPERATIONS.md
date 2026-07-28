@@ -114,7 +114,10 @@ bench --site guard.localhost run-tests --app access_guard
 
 **End-to-end smoke test** (after both are installed and enrolled per steps 1–3):
 click **Request Access** on the hub → confirm the browser lands as an ephemeral
-System Manager on the guard, a grant file exists under
-`site/private/access_guard/grants/`, the monitoring notice shows, and a
-policy-denied op (e.g. creating a User) is blocked. Then confirm log push and
-policy pull round-trip over the transport channel.
+System Manager on the guard, the grant is recorded in
+`site/private/access_guard/grants.json` (one shared file, keyed by jti), the
+monitoring notice shows, and a policy-denied op (e.g. creating a User) is
+blocked. Then confirm log push and policy pull round-trip over the transport
+channel — after one `sync_hourly`, `site/private/access_guard/pushed/<jti>.<kind>.meta`
+should show a non-zero `pushed_bytes`, and a second run should push nothing
+further (if `pushed_bytes` stays 0, the push isn't being acked).

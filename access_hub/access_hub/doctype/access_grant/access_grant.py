@@ -16,6 +16,8 @@ from access_hub.protocol import (
 	CLAIM_USER_LAST_NAME,
 	CLAIM_USER_MIDDLE_NAME,
 	PV,
+	utc_iso,
+	utc_now,
 )
 from access_hub.utils.crypto import sign_paseto
 
@@ -32,6 +34,10 @@ def create_and_mint(user: str, site: Document) -> str:
 		frappe.throw(f"Remote Site {site.name!r} has no transport token hash set.")
 
 	jti = uuid.uuid4().hex
+	# Stored Datetime fields stay naive system-local (Frappe convention - it's
+	# what the desk renders); the token's iat/exp claims are UTC-aware, since
+	# the guard compares them against real UTC. Both derive from one instant.
+	minted_utc = utc_now()
 	issued_at = now_datetime()
 	expires_at = add_to_date(issued_at, seconds=GRANT_TTL_SECONDS_DEFAULT)
 
@@ -62,8 +68,8 @@ def create_and_mint(user: str, site: Document) -> str:
 		"aud": site.transport_token_hash,
 		CLAIM_JTI: jti,
 		CLAIM_PV: PV,
-		"iat": issued_at.isoformat(),
-		"exp": expires_at.isoformat(),
+		"iat": utc_iso(minted_utc),
+		"exp": utc_iso(minted_utc, seconds=GRANT_TTL_SECONDS_DEFAULT),
 	}
 	return sign_paseto(claims)
 

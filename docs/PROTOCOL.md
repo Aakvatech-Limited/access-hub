@@ -22,6 +22,19 @@ key (`k4.secret`), the guard holds only the public key (`k4.public`). Two things
 No other signature scheme, no symmetric crypto, no HMAC in v1. `pv` (=`1`) is a claim in every
 signed artifact and a field in every JSON payload; a mismatch → `ProtocolVersionError` (HTTP 426).
 
+### Timestamps are UTC-only
+
+Every timestamp on the wire (`iat`, `exp`) and in any **file** either side persists (grant records'
+`issued_at`, the push-ack `acked_at`, log-line `ts=`) is ISO-8601 **carrying an explicit `+00:00`**.
+Mint via `protocol.utc_iso()`, read via `protocol.parse_iso()`, which **rejects a naive value**
+rather than assuming UTC.
+
+This is load-bearing, not cosmetic. `frappe.utils.now_datetime()` is naive *System Settings* local
+time; a receiver that assumes naive means UTC shifts every expiry by the emitter's UTC offset — so a
+120s grant token lived ~5.5h on an IST hub, and would have been born already-expired on a US one.
+DocType Datetime **fields** keep Frappe's own naive-system-local convention (that's what the desk
+renders), so the two must never be compared directly.
+
 ## 1. Configuration (`site_config.json`)
 
 **Guard site** (all three required; missing any → `ClientNotConfiguredError`, refuse tokens):
@@ -36,8 +49,9 @@ signed artifact and a field in every JSON payload; a mismatch → `ProtocolVersi
   hub's enrollment-help surface, which hands a client admin the three guard values above without
   anyone reading `site_config.json` by hand:
   - **Hub-wide values** (`access_guard_hub_url` + `access_guard_hub_public_key`, identical for
-    every client) are surfaced by `get_hub_enrollment_info` as an always-visible copyable field on
-    **Access Hub Settings**.
+    every client) are pushed onto the **Access Hub Settings** form by its `onload`
+    (`set_onload("hub_enrollment_info", ...)`) and rendered as a copyable field by
+    `access_hub_settings.js` — no separate API call.
   - The **per-site `access_guard_transport_token`** is shown **once**, at creation or rotation,
     via a dialog on the **Remote Site** form (button **"Update Token"** → `rotate_transport_token`).
     It is never stored plaintext — only `transport_token_hash` lives on the Remote Site. There is
@@ -62,7 +76,7 @@ PASETO `v4.public`, signed with the hub private key. Claims:
 | `user_last_name` | user last name | custom |
 | `user_email` | user email | custom; becomes the ephemeral user id |
 | `aud` | `transport_token_hash(client token)` | registered; verified on accept |
-| `iat` | now | registered (ISO-8601) |
+| `iat` | now | registered (ISO-8601, **UTC-aware**) |
 | `exp` | `iat + ~2m` | registered; **URL redemption deadline**, not session length |
 | `jti` | uuid4 hex | custom; single-use |
 | `pv` | `1` | custom |
@@ -89,7 +103,8 @@ On success: write grant file, create/reuse ephemeral user, start session, redire
 
 The policy is delivered as a **PASETO `v4.public` token** whose claims are the policy object +
 `iat` + `pv`. Guard verifies the signature (this *is* the authentication — no transport token
-needed for a pushed policy) and writes `{token, policy, verified_at}` to the policy file.
+needed for a pushed policy) and writes `{policy, verified_at}` to the policy file. The token itself
+is deliberately **not** kept — only its verified contents.
 
 Policy object example:
 
