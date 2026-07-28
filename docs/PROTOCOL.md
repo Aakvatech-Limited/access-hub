@@ -157,6 +157,17 @@ The matched Remote Site (not any payload field) is what identifies the client to
 `push_logs`) — always on, no policy opt-out — so the hub's Access Grant reflects
 session start/end in near-real-time.
 
+**Authentication is not authorization.** The transport token proves *which site
+is calling*; it does not by itself say *whose records that caller may touch*. So
+both jti-bearing endpoints additionally require the `jti` to be a grant **of the
+authenticated Remote Site** (`{jti, remote_site}`, not a by-name lookup — Access
+Grant is autonamed `field:jti`, so filtering by name alone would ignore the
+site). Without it, any enrolled client — every one of which legitimately holds a
+token — could end or re-activate another site's grant with an arbitrary
+`logout_reason`, or file logs under another site's jti and pick up that grant's
+`user_email`. `push_logs` is additionally capped at `MAX_PUSH_BYTES` per call, so
+one client cannot fill the issuer's disk.
+
 ### Guard
 | method | auth | payload | returns |
 |---|---|---|---|

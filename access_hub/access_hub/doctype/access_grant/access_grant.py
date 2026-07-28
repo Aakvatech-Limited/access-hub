@@ -74,10 +74,21 @@ def create_and_mint(user: str, site: Document) -> str:
 	return sign_paseto(claims)
 
 
-def record_session_event(jti: str, event: str, reason: str | None = None) -> None:
-	"""Applies a guard-reported session event to its Access Grant. Unknown
-	jti is a no-op — the grant may already be reaped by the time this lands."""
-	if not frappe.db.exists("Access Grant", jti):
+def record_session_event(remote_site: str, jti: str, event: str, reason: str | None = None) -> None:
+	"""Applies a guard-reported session event to its Access Grant. Unknown jti
+	is a no-op — the grant may already be reaped by the time this lands.
+
+	`remote_site` is the site the transport token authenticated as, and the
+	grant must belong to it. Without that filter, authentication proved only
+	*who is calling*, never *whose record they may touch*: any enrolled client
+	(or anyone holding one client's token) could end or re-activate another
+	site's grant and write an arbitrary logout_reason into it — i.e. forge the
+	hub's own audit record of who accessed which site and when.
+
+	Note the dict filter is load-bearing: Access Grant is autoname
+	`field:jti`, so exists("Access Grant", jti) is a by-NAME lookup that would
+	silently ignore the site."""
+	if not frappe.db.exists("Access Grant", {"jti": jti, "remote_site": remote_site}):
 		return
 	grant = frappe.get_doc("Access Grant", jti)
 	if event == "login":

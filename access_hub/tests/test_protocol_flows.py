@@ -185,13 +185,13 @@ class TestSessionLifecycleEvents(HubTestCase):
 	def test_login_sets_active_and_start_time(self):
 		from access_hub.access_hub.doctype.access_grant.access_grant import record_session_event
 
-		record_session_event(self.jti, "login")
+		record_session_event(self.site.name, self.jti, "login")
 		grant = frappe.get_doc("Access Grant", self.jti)
 		self.assertEqual(grant.status, "Active")
 		self.assertTrue(grant.start_time)
 
 		first_start_time = grant.start_time
-		record_session_event(self.jti, "login")
+		record_session_event(self.site.name, self.jti, "login")
 		grant.reload()
 		self.assertEqual(grant.status, "Active")
 		self.assertEqual(grant.start_time, first_start_time, "start_time must not move on a repeated event")
@@ -199,8 +199,8 @@ class TestSessionLifecycleEvents(HubTestCase):
 	def test_logout_sets_ended_end_time_and_reason(self):
 		from access_hub.access_hub.doctype.access_grant.access_grant import record_session_event
 
-		record_session_event(self.jti, "login")
-		record_session_event(self.jti, "logout", reason="idle_expired")
+		record_session_event(self.site.name, self.jti, "login")
+		record_session_event(self.site.name, self.jti, "logout", reason="idle_expired")
 
 		grant = frappe.get_doc("Access Grant", self.jti)
 		self.assertEqual(grant.status, "Ended")
@@ -210,7 +210,21 @@ class TestSessionLifecycleEvents(HubTestCase):
 	def test_unknown_jti_is_a_no_op(self):
 		from access_hub.access_hub.doctype.access_grant.access_grant import record_session_event
 
-		record_session_event("no-such-jti-at-all", "login")  # must not raise
+		record_session_event(self.site.name, "no-such-jti-at-all", "login")  # must not raise
+
+	def test_event_for_another_sites_grant_is_a_no_op(self):
+		"""Authentication says which site is calling; it must not also grant
+		authority over another site's records. A grant belongs to exactly one
+		Remote Site, so an event reported by a *different* site is ignored -
+		otherwise any enrolled client could forge another's audit trail."""
+		from access_hub.access_hub.doctype.access_grant.access_grant import record_session_event
+
+		other = self.make_remote_site(f"other-site-{self._testMethodName}.localhost")
+		record_session_event(other.name, self.jti, "logout", reason="FORGED")
+
+		grant = frappe.get_doc("Access Grant", self.jti)
+		self.assertEqual(grant.status, "Issued", "another site's event must not change status")
+		self.assertIsNone(grant.logout_reason)
 
 
 class TestPolicyToken(HubTestCase):
@@ -663,8 +677,13 @@ class TestIngestEndpointsOverRealHttp(HubTestCase):
 		super().setUp()
 		self.plaintext_token = "http-regression-transport-token-1"
 		self.host = f"test-http-{self._testMethodName}.localhost"
-		self.jti = f"http-test-{self._testMethodName}-jti"
 		self.site = self.make_remote_site(self.host, transport_token=self.plaintext_token)
+		# A real minted grant, not a synthetic jti: the ingest endpoints require
+		# the jti to belong to the authenticated site, so a made-up one is now
+		# (correctly) a 401 - see PROTOCOL.md §5 "Authentication is not
+		# authorization".
+		self.user = self.make_user(f"http-test-{self._testMethodName}@example.com")
+		self.jti = decode_claims(create_and_mint(self.user.name, self.site))["jti"]
 		# logs are keyed by Remote Site name (a hash), not host — clean up by name.
 		self.register_log_file_cleanup(self.site.name, self.jti)
 		# Make the Remote Site visible to the second DB connection the HTTP
@@ -702,6 +721,25 @@ class TestIngestEndpointsOverRealHttp(HubTestCase):
 	def test_pv_mismatch_over_http_returns_426(self):
 		resp = self._post("access_hub.api.get_policy", b'{"pv":2}', token=self.plaintext_token)
 		self.assertEqual(resp.status_code, 426)
+
+	def test_push_logs_for_another_sites_jti_is_rejected(self):
+		"""A valid transport token authenticates its OWN site only. Pushing
+		under a jti belonging to a different Remote Site must fail, or any
+		enrolled client could file logs against another tenant's grant (and
+		pick up that grant's user_email via upsert_index)."""
+		other_site = self.make_remote_site(f"other-http-{self._testMethodName}.localhost")
+		other_user = self.make_user(f"other-http-{self._testMethodName}@example.com")
+		other_jti = decode_claims(create_and_mint(other_user.name, other_site))["jti"]
+		self.register_log_file_cleanup(other_site.name, other_jti)
+		frappe.db.commit()
+
+		body = b'{"pv":1,"jti":"' + other_jti.encode() + b'","log_kind":"request","lines":"ts=1 forged"}'
+		resp = self._post("access_hub.api.push_logs", body, token=self.plaintext_token)
+		self.assertEqual(resp.status_code, 401)
+		self.assertFalse(
+			frappe.db.exists("Session Log File", {"jti": other_jti}),
+			"no log row may be created for another site's jti",
+		)
 
 
 class TestEnrollmentConfig(HubTestCase):

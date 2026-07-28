@@ -6,6 +6,7 @@ from urllib.parse import quote
 
 import frappe
 
+from access_hub.constants import MAX_PUSH_BYTES
 from access_hub.protocol import (
 	TRANSPORT_TOKEN_HEADER,
 	AccessProtocolError,
@@ -141,6 +142,15 @@ def push_logs(
 		frappe.throw("jti is required.")
 	if log_kind not in ("request", "doc"):
 		frappe.throw("log_kind must be 'request' or 'doc'.")
+	# The jti must be a grant of the site this token authenticated as - see
+	# record_session_event. Otherwise a client could file logs under another
+	# site's jti (leaking that grant's user_email into its own Session Log File
+	# row via upsert_index), or under a jti with no grant at all, creating
+	# arbitrary attacker-named files and rows.
+	if not frappe.db.exists("Access Grant", {"jti": jti, "remote_site": site.name}):
+		raise TransportAuthError("jti is not a grant of the authenticated site.")
+	if len(lines or "") > MAX_PUSH_BYTES:
+		frappe.throw(f"Payload too large; cap is {MAX_PUSH_BYTES} bytes per call.")
 
 	added = append_lines(site.name, jti, log_kind, lines or "")
 	upsert_index(site.name, jti, log_kind=log_kind, added_lines=added)
@@ -161,7 +171,7 @@ def report_session_event(site, jti: str | None = None, event: str | None = None,
 
 	if not jti or not event:
 		frappe.throw("jti and event are required.")
-	record_session_event(jti, event, reason)
+	record_session_event(site.name, jti, event, reason)
 	return {"ok": True}
 
 

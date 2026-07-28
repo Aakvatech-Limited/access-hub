@@ -11,6 +11,15 @@ CONF_HUB_PUBLIC_KEY_LOCAL = "access_hub_public_key"  # paserk k4.public — hub'
 # aud = transport_token_hash(client transport token); exp = iat + GRANT_TTL.
 GRANT_TTL_SECONDS_DEFAULT = 120  # URL redemption deadline, NOT session length - browser redirects immediately
 
+# --- Log ingest ---------------------------------------------------------------
+# Per-call cap on push_logs' `lines`. The hub is the trusted component whose
+# availability every tenant depends on, and append_lines writes whatever arrives
+# to disk - so one compromised or looping client must not be able to fill the
+# issuer's disk. Generous next to a real session's hourly tail (guard-side
+# max_key_size_bytes caps individual values at 256 KiB, and .doc.log lines are
+# size-exempt), so a legitimate push is never rejected.
+MAX_PUSH_BYTES = 8 * 1024 * 1024
+
 # --- Policy floors ------------------------------------------------------------
 # Lower bound on session_expiry_seconds, enforced in AccessHubSettings.validate.
 # Guards against 0 ("never idle out"), which Frappe's reqd/non_negative both
