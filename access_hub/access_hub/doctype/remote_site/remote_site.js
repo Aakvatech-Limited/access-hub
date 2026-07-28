@@ -26,7 +26,7 @@ frappe.ui.form.on("Remote Site", {
 				freeze_message: __("Requesting access..."),
 				callback: (r) => {
 					if (r.message && r.message.redirect_url) {
-						window.location.href = r.message.redirect_url;
+						window.open(r.message.redirect_url, "_blank");
 					}
 				},
 			});

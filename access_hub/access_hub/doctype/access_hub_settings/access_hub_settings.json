@@ -12,6 +12,7 @@
   "policy_section",
   "rules",
   "session_expiry_seconds",
+  "disallow_simultaneous_sessions",
   "logging_section",
   "log_reads",
   "max_key_size_bytes",
@@ -42,6 +43,13 @@
    "fieldname": "access_disabled",
    "fieldtype": "Check",
    "label": "Disable All Access"
+  },
+  {
+   "default": "0",
+   "description": "Cap each ephemeral user to one active session at a time. Off by default (Frappe's own multi-session limit applies).",
+   "fieldname": "disallow_simultaneous_sessions",
+   "fieldtype": "Check",
+   "label": "Disallow Simultaneous Sessions"
   },
   {
    "fieldname": "access_control_column_break",

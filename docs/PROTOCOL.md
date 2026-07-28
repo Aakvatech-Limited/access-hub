@@ -106,7 +106,8 @@ Policy object example:
   "push_grace_days": 7,
   "name_suffix": "consultant",
   "access_disabled": false,
-  "blacklisted_emails": []
+  "blacklisted_emails": [],
+  "disallow_simultaneous_sessions": false
 }
 ```
 
@@ -114,6 +115,12 @@ Policy object example:
 **Delivery:** policy push on save + policy pull on the guard's hourly check-in are both
 unconditional (not configurable in v1), so `access_disabled`/`blacklisted_emails` always reach a
 client quickly. `log_sync_enabled` only gates the rest of that hourly check-in (log push, retention).
+`disallow_simultaneous_sessions` (default off): when on, each ephemeral user is capped to one
+active session (`User.simultaneous_sessions = 1`, applied on every accept() - both fresh
+provisioning and reuse - so a policy change takes effect the next time that user's grant is
+accepted, not just at first creation); off uses a large-but-finite cap (100) since Frappe's own
+session-clearing logic (`get_sessions_to_clear`, frappe/sessions.py) treats a falsy
+`simultaneous_sessions` as 1, not "unlimited".
 
 ## 5. Endpoints
 

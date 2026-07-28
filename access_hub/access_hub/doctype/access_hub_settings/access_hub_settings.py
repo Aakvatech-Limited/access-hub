@@ -18,6 +18,7 @@ from access_hub.protocol import (
 	POLICY_ACCESS_DISABLED,
 	POLICY_ALWAYS_LOG_DOCTYPES,
 	POLICY_BLACKLISTED_EMAILS,
+	POLICY_DISALLOW_SIMULTANEOUS_SESSIONS,
 	POLICY_LOG_READS,
 	POLICY_LOG_SYNC_ENABLED,
 	POLICY_MAX_KEY_SIZE_BYTES,
@@ -115,6 +116,7 @@ class AccessHubSettings(Document):
 			POLICY_ACCESS_DISABLED: bool(self.access_disabled),
 			# Unioned with disabled_granted_user_emails() (self-correcting, no cleanup needed).
 			POLICY_BLACKLISTED_EMAILS: list(blacklisted_user_emails(self) | disabled_granted_user_emails()),
+			POLICY_DISALLOW_SIMULTANEOUS_SESSIONS: bool(self.disallow_simultaneous_sessions),
 		}
 
 	def is_blacklisted(self, user: str) -> bool:
