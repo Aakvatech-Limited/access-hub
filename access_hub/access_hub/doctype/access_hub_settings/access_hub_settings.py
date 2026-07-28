@@ -192,7 +192,7 @@ def push_policy_to_all_sites(token: str):
 	for site in frappe.get_all("Remote Site", fields=["name", "host", "port", "protocol"]):
 		url = f"{site.protocol}://{site.host}:{site.port}/api/method/access_guard.api.receive_policy"
 		try:
-			requests.post(url, json={"policy_token": token}, timeout=30)
+			requests.post(url, json={"token": token}, timeout=30)
 		except Exception:
 			frappe.log_error(title=f"access_hub: policy push to {site.name} failed")
 

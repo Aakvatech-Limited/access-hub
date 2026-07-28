@@ -33,6 +33,10 @@ def get_public_key() -> Key:
 	return Key.from_paserk(public_paserk)
 
 
+def decode_claims(token: str) -> dict:
+	return json.loads(pyseto.decode(get_public_key(), token).payload)
+
+
 class HubTestCase(FrappeTestCase):
 	"""Common fixture helpers.
 
@@ -128,18 +132,15 @@ class TestKeypairAndGrantMinting(HubTestCase):
 		site = self.make_remote_site("test-grant-site.localhost")
 		user = self.make_user("grant-employee@example.com")
 
-		grant, token = create_and_mint(user.name, site)
+		token = create_and_mint(user.name, site)
+		claims = decode_claims(token)
 
+		# Access Grant is autonamed by jti (see test_grant_autonames_by_jti).
+		grant = frappe.get_doc("Access Grant", claims["jti"])
 		self.assertEqual(grant.status, "Issued")
-		self.assertTrue(grant.jti)
 		self.assertEqual(grant.user_email, user.email or user.name)
 
-		pub = get_public_key()
-		decoded = pyseto.decode(pub, token)
-		claims = json.loads(decoded.payload)
-
 		self.assertEqual(claims["user_email"], user.email or user.name)
-		self.assertEqual(claims["jti"], grant.jti)
 		self.assertEqual(claims["pv"], PV)
 
 		site.reload()
@@ -152,7 +153,7 @@ class TestKeypairAndGrantMinting(HubTestCase):
 	def test_grant_token_tamper_fails_verification(self):
 		site = self.make_remote_site("test-tamper-site.localhost")
 		user = self.make_user("tamper-employee@example.com")
-		_grant, token = create_and_mint(user.name, site)
+		token = create_and_mint(user.name, site)
 
 		tampered = token[:-4] + ("A" * 4 if not token.endswith("AAAA") else "BBBB")
 		pub = get_public_key()
@@ -165,7 +166,8 @@ class TestKeypairAndGrantMinting(HubTestCase):
 		direct frappe.get_doc("Access Grant", jti), no filter needed."""
 		site = self.make_remote_site("test-autoname-site.localhost")
 		user = self.make_user("autoname-employee@example.com")
-		grant, _token = create_and_mint(user.name, site)
+		token = create_and_mint(user.name, site)
+		grant = frappe.get_doc("Access Grant", decode_claims(token)["jti"])
 		self.assertEqual(grant.name, grant.jti)
 
 
@@ -178,18 +180,18 @@ class TestSessionLifecycleEvents(HubTestCase):
 		super().setUp()
 		self.site = self.make_remote_site(f"test-session-event-{self._testMethodName}.localhost")
 		self.user = self.make_user(f"session-event-{self._testMethodName}@example.com")
-		self.grant, _token = create_and_mint(self.user.name, self.site)
+		self.jti = decode_claims(create_and_mint(self.user.name, self.site))["jti"]
 
 	def test_accepted_and_login_set_active_and_start_time(self):
 		from access_hub.access_hub.doctype.access_grant.access_grant import record_session_event
 
-		record_session_event(self.grant.jti, "accepted")
-		grant = frappe.get_doc("Access Grant", self.grant.jti)
+		record_session_event(self.jti, "accepted")
+		grant = frappe.get_doc("Access Grant", self.jti)
 		self.assertEqual(grant.status, "Active")
 		self.assertTrue(grant.start_time)
 
 		first_start_time = grant.start_time
-		record_session_event(self.grant.jti, "login")
+		record_session_event(self.jti, "login")
 		grant.reload()
 		self.assertEqual(grant.status, "Active")
 		self.assertEqual(grant.start_time, first_start_time, "start_time must not move on a later event")
@@ -197,10 +199,10 @@ class TestSessionLifecycleEvents(HubTestCase):
 	def test_logout_sets_ended_end_time_and_reason(self):
 		from access_hub.access_hub.doctype.access_grant.access_grant import record_session_event
 
-		record_session_event(self.grant.jti, "login")
-		record_session_event(self.grant.jti, "logout", reason="idle_expired")
+		record_session_event(self.jti, "login")
+		record_session_event(self.jti, "logout", reason="idle_expired")
 
-		grant = frappe.get_doc("Access Grant", self.grant.jti)
+		grant = frappe.get_doc("Access Grant", self.jti)
 		self.assertEqual(grant.status, "Ended")
 		self.assertTrue(grant.end_time)
 		self.assertEqual(grant.logout_reason, "idle_expired")

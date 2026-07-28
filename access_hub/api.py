@@ -43,7 +43,7 @@ def request_access(remote_site: str):
 	if settings.is_blacklisted(user):
 		frappe.throw("Access is currently disabled for this account.")
 
-	_grant, token = create_and_mint(user, site)
+	token = create_and_mint(user, site)
 	return {"redirect_url": site.build_accept_url(token)}
 
 

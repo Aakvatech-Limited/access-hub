@@ -24,11 +24,10 @@ class AccessGrant(Document):
 	pass
 
 
-def create_and_mint(user: str, site: "frappe.model.document.Document") -> tuple["AccessGrant", str]:
+def create_and_mint(user: str, site: Document) -> str:
 	"""Create an Access Grant row for `user` (a User) against `site` (a
 	Remote Site doc), mint its PASETO v4.public grant token per PROTOCOL §3,
-	and return (grant_doc, token).
-	"""
+	and return the token."""
 	if not site.transport_token_hash:
 		frappe.throw(f"Remote Site {site.name!r} has no transport token hash set.")
 
@@ -66,8 +65,7 @@ def create_and_mint(user: str, site: "frappe.model.document.Document") -> tuple[
 		"iat": issued_at.isoformat(),
 		"exp": expires_at.isoformat(),
 	}
-	token = sign_paseto(claims)
-	return grant, token
+	return sign_paseto(claims)
 
 
 def record_session_event(jti: str, event: str, reason: str | None = None) -> None:

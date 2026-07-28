@@ -139,7 +139,7 @@ session start/end in near-real-time.
 | method | auth | payload | returns |
 |---|---|---|---|
 | `access_guard.api.accept` (allow_guest) | the grant token | `?token=<paseto>` | 302 → default app path (`get_default_path()` or `/app`) |
-| `access_guard.api.receive_policy` (allow_guest) | the policy token itself | `{ policy_token }` | `{ ok }` |
+| `access_guard.api.receive_policy` (allow_guest) | the policy token itself | `{ token }` | `{ ok }` |
 
 All error responses use `AccessProtocolError.as_response()` →
 `{ "error": { "code", "pv", "message" } }` with the class's `http_status`.
