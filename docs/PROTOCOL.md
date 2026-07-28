@@ -110,7 +110,7 @@ Policy object example:
 }
 ```
 
-`mode ∈ {deny, warn}`; `actions ⊂ {create,write,delete,submit,cancel}`.
+`mode ∈ {deny, warn}`; `actions ⊂ {create,write,delete,submit,cancel,rename}`.
 **Delivery:** policy push on save + policy pull on the guard's hourly check-in are both
 unconditional (not configurable in v1), so `access_disabled`/`blacklisted_emails` always reach a
 client quickly. `log_sync_enabled` only gates the rest of that hourly check-in (log push, retention).
@@ -155,37 +155,52 @@ file, keyed by jti (`{jti: record, ...}`) — not one file per grant.
   "user_name": "...", "user_email": "...",
   "user": "john.doe@example.com",     // ephemeral user id (== user_email in v1)
   "sid": "...",                        // written already-set, after login (maps session to jti)
-  "issued_at": "iso",
-  "effective_expiry_seconds": 21600    // policy.session_expiry_seconds at accept; the reaper
-                                       // idles out at this value alone (Frappe's own site-wide
-                                       // session_expiry is enforced separately, per-request)
+  "issued_at": "iso"
 }
 ```
+
+The reaper's idle-expiry always reads the *current* policy.session_expiry_seconds
+live (never a value stamped at accept-time), so a policy change takes effect for
+already-issued grants too. Frappe's own site-wide session_expiry is enforced
+separately, per-request.
 
 "Is this session ephemeral?" → `frappe.session.sid` appears as a `sid` in some grant file.
 "Which users may the reaper touch?" → only `user` values present in grant files (namespace filter,
 `ephemeral_users()`).
 
-## 7. Log line schema (`site/private/access_guard/logs/<jti>.log`, `<jti>.doc.log`)
+## 7. Log line schema (`site/private/access_guard/logs/<jti>.request.log`, `<jti>.doc.log`)
 
 Two files per session (jti) — no per-line type/jti/sid, since the filename already identifies
 both. logfmt lines (`key=value`, space-separated; a value containing whitespace is JSON-quoted).
 Session lifecycle (login/logout) has no local file — see `report_session_event` (§5).
 
 ```
-# <jti>.log — one line per whitelisted call, written once from after_request
-ts=<iso> path=frappe.client.save http_method=POST status=ok code=200 body=<raw request body, truncated to max_key_size>
+# <jti>.request.log — one line per whitelisted call, written from after_request
+ts=<iso> path=frappe.client.save http_method=POST status=ok code=200 params={"key":"...","...":"each top-level key truncated to max_key_size independently"} body={"...":"parsed JSON body, if any, or the raw string if not JSON"}
 
-# <jti>.doc.log — one line per committed change to an always-log doctype (after_commit, size-exempt)
-ts=<iso> event=write doctype=User name=... doc={"...":"full doc state at commit, not a diff"}
+# <jti>.doc.log — one line per doc event, size-exempt
+ts=<iso> event=create doctype=User name=... doc={"...":"full doc state"}
+ts=<iso> event=write doctype=User name=... diff={"changed":[[field,old,new],...],"added":[...],"removed":[...],"row_changed":[...]}
+ts=<iso> event=rename doctype=ToDo name=<new_name> doc={"old_name":"...","new_name":"..."}
+ts=<iso> event=denied:<action> doctype=User name=... doc=... | diff=...
 ```
 
 Request logging keys the skip decision off the **HTTP verb**, not the endpoint name: **safe verbs**
 (GET/HEAD/OPTIONS, from `frappe.auth.SAFE_HTTP_METHODS`) are skipped unless `log_reads` is on;
-**unsafe verbs are always logged**. Rationale: a user's mutating action always arrives via an
-unsafe verb, so this is a version-proof signal needing no per-endpoint denylist and no reliance on
-`transaction_writes`; sensitive-doctype writes are still caught verb-independently by the always-log
-doc channel (`always_log_doctypes`).
+**unsafe verbs are always logged**. `params` (query args + form-encoded fields) and `body` (the
+request body — parsed as JSON when the request is JSON, else the raw string) are separate fields,
+never merged into one dict — folding `body` into `params` would risk it colliding with an actual
+query/form field literally named `body`. Both are read straight from the request object, not
+`frappe.form_dict` (mutable, handler-writable, not trustworthy for an audit log).
+
+Doc-event logging: `create`/`cancel`/`delete`/`rename` log the full doc (or `{old_name, new_name}`
+for rename — nothing else changes); `write`/`submit` log a diff against the pre-save state instead
+(`Version.get_diff`, falling back to the full doc if the diff itself fails). A denied attempt logs
+immediately as `denied:<action>` (nothing commits on a deny, so it can't ride `after_commit` like
+the rest) — diff or full doc, same rule as the allowed case, since the pre-save state is available
+regardless of whether the operation was ultimately denied. Sensitive-doctype writes are caught
+verb-independently by the always-log doc channel (`always_log_doctypes`), which now also covers
+submit/cancel/rename, not just write/delete.
 
 ## 8. Version / errors
 

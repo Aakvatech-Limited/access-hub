@@ -11,7 +11,8 @@
   "action_write",
   "action_delete",
   "action_submit",
-  "action_cancel"
+  "action_cancel",
+  "action_rename"
  ],
  "fields": [
   {
@@ -70,6 +71,14 @@
    "fieldtype": "Check",
    "in_list_view": 1,
    "label": "Cancel"
+  },
+  {
+   "columns": 1,
+   "default": "0",
+   "fieldname": "action_rename",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Rename"
   }
  ],
  "istable": 1,

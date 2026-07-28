@@ -87,7 +87,7 @@
    "label": "Log Reads"
   },
   {
-   "default": "524288",
+   "default": "262144",
    "description": "Logged values larger than this are truncated.",
    "fieldname": "max_key_size_bytes",
    "fieldtype": "Int",

@@ -222,7 +222,7 @@ uncaught. The guard **denies** the meta-ops instead.
 - Wire/file: a normalized, versioned JSON rule list, decoupled from the UI. A
   single `mode` field (`deny` / `warn`, extensible later to `require-approval`
   etc.) keeps the schema stable; actions use Frappe's canonical names
-  (`create/write/delete/submit/cancel`). Exact policy-token format is in
+  (`create/write/delete/submit/cancel/rename`). Exact policy-token format is in
   [PROTOCOL.md §4](PROTOCOL.md).
 - **Default seed:** `User → deny [create, write, delete]`, seeded via an
   idempotent install step (guard-on-existence-before-insert).
@@ -289,11 +289,12 @@ already defends against the in-scope adversary.
 (routes by module, wrong dir) and do **not** create one `logging.Logger` per sid
 (handler/fd leak in long-lived workers). Instead **append logfmt lines to
 per-session files, open-append-close per line** (traffic is a human doing manual
-ops — low volume): `<jti>.log` for requests, `<jti>.doc.log` for doc changes — no
-per-line type/jti/sid, since the filename already identifies both. `sid → jti` is
-recorded in the grant file at login, so `before_request`/`after_request` read
-`frappe.session.sid` → map to `jti` → append. Log-line schema is in
-[PROTOCOL.md §7](PROTOCOL.md).
+ops — low volume): `<jti>.request.log` for requests, `<jti>.doc.log` for doc
+changes — no per-line type/jti/sid, since the filename already identifies both.
+There's no `before_request` hook — `frappe.request`/`frappe.session` are still the
+same live objects by the time `after_request` runs, so everything (method, params,
+`sid → jti` via the grant file) is read fresh there, nothing needs stashing ahead
+of time. Log-line schema is in [PROTOCOL.md §7](PROTOCOL.md).
 
 **What gets logged:**
 - **Request stream — one line per call, written from `after_request`:** the skip
@@ -302,17 +303,29 @@ recorded in the grant file at login, so `before_request`/`after_request` read
   unless `log_reads` is on** (default off); unsafe verbs are **always logged**. A
   user's mutating action always arrives via an unsafe verb, so this is a reliable,
   version-proof signal — no per-endpoint denylist, no reliance on
-  `frappe.db.transaction_writes`. The raw request body is captured (size-capped),
-  not form_dict-derived args — meaningful for both JSON and non-JSON payloads.
-- **Sensitive-doctype writes (always, in full):** `doc_events` `on_update` /
-  `on_trash` on a configurable always-log doctype list (default: User, Server
-  Script) register a `frappe.db.after_commit` callback that appends the doc's full
-  state at commit time (not a diff) — **no commit → no log**. Exempt from the size
-  cap. This is the reliable channel that *knows the doctype*, so it catches a
-  sensitive write verb-independently, even if it rode a safe verb the request
-  stream skipped.
-- **Max key size (default 512 KB):** truncates the logged request body; doc-change
-  lines are exempt.
+  `frappe.db.transaction_writes`. Params (query args + form fields) and the request
+  body (parsed as JSON when `request.is_json`, else the raw string) are read
+  straight from the request object — never from `frappe.form_dict`, which a
+  whitelisted handler can mutate before the log line is written, making it
+  untrustworthy for an audit trail — and logged as two separate fields, not merged
+  into one dict (a JSON body key could otherwise collide with an actual query/form
+  field of the same name). Each top-level param key is truncated independently
+  against the size cap, so one oversized value can't crowd out a small-but-important
+  one in the same line.
+- **Sensitive-doctype writes (always):** `doc_events` on a configurable
+  always-log doctype list (default: User, Server Script) now covers
+  create/write/submit/cancel/delete/rename uniformly (not just write/delete),
+  registering a `frappe.db.after_commit` callback — **no commit → no log**. This
+  is the reliable channel that *knows the doctype*, so it catches a sensitive
+  write verb-independently, even if it rode a safe verb the request stream
+  skipped. `write`/`submit` log a diff (`Version.get_diff` against the pre-save
+  state, falling back to the full doc if the diff itself errors); `create`/
+  `cancel`/`delete` log the full doc; `rename` logs `{old_name, new_name}`. A
+  denied attempt logs immediately (nothing commits on a deny) as
+  `denied:<action>`, diff-or-doc by the same rule as the allowed case. All
+  exempt from the size cap.
+- **Max key size (default: see `Access Hub Settings.max_key_size_bytes`):**
+  truncates each request-log param independently; doc-change lines are exempt.
 - **Session lifecycle:** login / logout (+ reason) has no local
   file — pushed immediately to the hub's Access Grant, see below.
 

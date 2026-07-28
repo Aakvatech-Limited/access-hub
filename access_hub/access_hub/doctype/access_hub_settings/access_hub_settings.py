@@ -36,14 +36,22 @@ from access_hub.utils.crypto import sign_paseto
 # clashing with SQL/Frappe). Used both to read rows into the wire object and to
 # seed defaults, so neither drifts from the protocol's action vocabulary.
 # NOTE: no "read" — the guard never enforces it (doc_events only cover
-# create/write/submit/cancel/delete), so it'd be a checkbox that does nothing.
-POLICY_ACTIONS = ("create", "write", "delete", "submit", "cancel")
+# create/write/submit/cancel/delete/rename), so it'd be a checkbox that does
+# nothing.
+POLICY_ACTIONS = ("create", "write", "delete", "submit", "cancel", "rename")
 
 # seed_default_policy()'s install-time child-table rows, already shaped for
 # settings.append() — this is a one-time seed, not a wire-protocol concept, so
 # it lives here rather than in the shared protocol.py.
 DEFAULT_RULES = [
-	{"document_type": "User", "mode": MODE_DENY, "action_create": 1, "action_write": 1, "action_delete": 1}
+	{
+		"document_type": "User",
+		"mode": MODE_DENY,
+		"action_create": 1,
+		"action_write": 1,
+		"action_delete": 1,
+		"action_rename": 1,
+	},
 ]
 DEFAULT_ALWAYS_LOG_DOCTYPES = ["User", "Server Script", "Scheduled Job Type"]
 
