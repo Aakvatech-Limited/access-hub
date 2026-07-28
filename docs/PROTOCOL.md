@@ -91,7 +91,7 @@ The policy is delivered as a **PASETO `v4.public` token** whose claims are the p
 `iat` + `pv`. Guard verifies the signature (this *is* the authentication — no transport token
 needed for a pushed policy) and writes `{token, policy, verified_at}` to the policy file.
 
-Policy object keys (defaults live in `protocol.py::POLICY_DEFAULTS`):
+Policy object example:
 
 ```json
 {

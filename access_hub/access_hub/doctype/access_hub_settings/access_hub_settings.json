@@ -26,11 +26,10 @@
  "fields": [
   {
    "default": "consultant",
-   "description": "Added to the end of an ephemeral user's name, e.g. \"John Doe (consultant)\".",
+   "description": "Added to the end of an ephemeral user's name, e.g. \"John Doe (consultant)\". Leave blank for no suffix.",
    "fieldname": "name_suffix",
    "fieldtype": "Data",
-   "label": "Name Suffix",
-   "reqd": 1
+   "label": "Name Suffix"
   },
   {
    "fieldname": "access_control_section",
@@ -122,8 +121,8 @@
    "fieldname": "push_grace_days",
    "fieldtype": "Int",
    "label": "Push Grace (days)",
-   "non_negative": 1,
-   "reqd": 1
+   "mandatory_depends_on": "eval:doc.log_sync_enabled",
+   "non_negative": 1
   },
   {
    "description": "Changes to these are always logged in full, regardless of the rules above. A Document Type not used on a client site is simply ignored there.",

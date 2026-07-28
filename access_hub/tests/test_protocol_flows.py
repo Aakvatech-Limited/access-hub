@@ -21,7 +21,6 @@ from access_hub.access_hub.doctype.session_log_file.session_log_file import (
 )
 from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL, POLICY_TOKEN_CACHE_KEY, TRANSPORT_TOKEN_MIN_LEN
 from access_hub.protocol import (
-	POLICY_DEFAULTS,
 	POLICY_RULES,
 	PV,
 	TRANSPORT_TOKEN_HEADER,
@@ -214,7 +213,7 @@ class TestSessionLifecycleEvents(HubTestCase):
 
 class TestPolicyToken(HubTestCase):
 	def test_policy_token_round_trips_and_seeds_defaults(self):
-		"""policy token signs + round-trips; POLICY_DEFAULTS seed present."""
+		"""policy token signs + round-trips; DEFAULT_RULES seed present."""
 		settings = frappe.get_single("Access Hub Settings")
 		if not settings.rules:
 			from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
@@ -232,13 +231,7 @@ class TestPolicyToken(HubTestCase):
 		self.assertEqual(claims["pv"], PV)
 		self.assertIn(POLICY_RULES, claims)
 
-		default_rule = POLICY_DEFAULTS[POLICY_RULES][0]
-		self.assertTrue(
-			any(
-				r["doctype"] == default_rule["doctype"] and r["mode"] == default_rule["mode"]
-				for r in claims[POLICY_RULES]
-			)
-		)
+		self.assertTrue(any(r["doctype"] == "User" and r["mode"] == "deny" for r in claims[POLICY_RULES]))
 
 	def test_blacklisted_users_and_access_disabled_round_trip_into_policy_dict(self):
 		from access_hub.protocol import POLICY_ACCESS_DISABLED, POLICY_BLACKLISTED_EMAILS

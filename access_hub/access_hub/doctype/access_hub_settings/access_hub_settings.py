@@ -14,10 +14,10 @@ from access_hub.constants import (
 from access_hub.protocol import (
 	GUARD_CONF_HUB_PUBLIC_KEY,
 	GUARD_CONF_HUB_URL,
+	MODE_DENY,
 	POLICY_ACCESS_DISABLED,
 	POLICY_ALWAYS_LOG_DOCTYPES,
 	POLICY_BLACKLISTED_EMAILS,
-	POLICY_DEFAULTS,
 	POLICY_LOG_READS,
 	POLICY_LOG_SYNC_ENABLED,
 	POLICY_MAX_KEY_SIZE_BYTES,
@@ -38,6 +38,14 @@ from access_hub.utils.crypto import sign_paseto
 # NOTE: no "read" — the guard never enforces it (doc_events only cover
 # create/write/submit/cancel/delete), so it'd be a checkbox that does nothing.
 POLICY_ACTIONS = ("create", "write", "delete", "submit", "cancel")
+
+# seed_default_policy()'s install-time child-table rows, already shaped for
+# settings.append() — this is a one-time seed, not a wire-protocol concept, so
+# it lives here rather than in the shared protocol.py.
+DEFAULT_RULES = [
+	{"document_type": "User", "mode": MODE_DENY, "action_create": 1, "action_write": 1, "action_delete": 1}
+]
+DEFAULT_ALWAYS_LOG_DOCTYPES = ["User", "Server Script", "Scheduled Job Type"]
 
 
 class AccessHubSettings(Document):
@@ -63,17 +71,15 @@ class AccessHubSettings(Document):
 		anything that needs to force a republish outside of a Settings save
 		(e.g. user_events on User disable/delete) without depending on
 		on_update's other side effects."""
-		# Before the keypair exists (e.g. right after install seeds defaults) we
-		# can't sign yet. get_current_policy_token() builds it lazily on first
-		# fetch instead, once `bench access-hub-generate-keypair` has run.
+		if self.is_new():
+			return
+
 		try:
 			token = self.build_and_sign_policy_token()
 		except ClientNotConfiguredError:
 			return
+
 		frappe.cache.set_value(POLICY_TOKEN_CACHE_KEY, token, expires_in_sec=POLICY_TOKEN_CACHE_TTL_SECONDS)
-		# Not configurable in v1 - always best-effort (backstopped by the
-		# guard's unconditional hourly pull). Enqueued after commit so a
-		# rolled-back save can never push a policy that was never saved.
 		frappe.enqueue(push_policy_to_all_sites, queue="long", enqueue_after_commit=True, token=token)
 
 	def as_policy_dict(self) -> dict:
@@ -86,24 +92,18 @@ class AccessHubSettings(Document):
 				continue
 			rules.append({"doctype": row.document_type, "actions": actions, "mode": row.mode})
 
-		if not rules:
-			rules = POLICY_DEFAULTS[POLICY_RULES]
-
-		always_log = [
-			row.document_type for row in self.always_log_doctypes if row.document_type
-		] or POLICY_DEFAULTS[POLICY_ALWAYS_LOG_DOCTYPES]
+		always_log = [row.document_type for row in self.always_log_doctypes if row.document_type]
 
 		return {
 			POLICY_RULES: rules,
-			POLICY_SESSION_EXPIRY_SECONDS: self.session_expiry_seconds
-			or POLICY_DEFAULTS[POLICY_SESSION_EXPIRY_SECONDS],
+			POLICY_SESSION_EXPIRY_SECONDS: self.session_expiry_seconds,
 			POLICY_ALWAYS_LOG_DOCTYPES: always_log,
-			POLICY_MAX_KEY_SIZE_BYTES: self.max_key_size_bytes or POLICY_DEFAULTS[POLICY_MAX_KEY_SIZE_BYTES],
+			POLICY_MAX_KEY_SIZE_BYTES: self.max_key_size_bytes,
 			POLICY_LOG_READS: bool(self.log_reads),
 			POLICY_LOG_SYNC_ENABLED: bool(self.log_sync_enabled),
-			POLICY_RETENTION_DAYS: self.retention_days or POLICY_DEFAULTS[POLICY_RETENTION_DAYS],
-			POLICY_PUSH_GRACE_DAYS: self.push_grace_days or POLICY_DEFAULTS[POLICY_PUSH_GRACE_DAYS],
-			POLICY_NAME_SUFFIX: self.name_suffix or POLICY_DEFAULTS[POLICY_NAME_SUFFIX],
+			POLICY_RETENTION_DAYS: self.retention_days,
+			POLICY_PUSH_GRACE_DAYS: self.push_grace_days,
+			POLICY_NAME_SUFFIX: self.name_suffix or "",
 			POLICY_ACCESS_DISABLED: bool(self.access_disabled),
 			# Unioned with disabled_granted_user_emails() (self-correcting, no cleanup needed).
 			POLICY_BLACKLISTED_EMAILS: list(blacklisted_user_emails(self) | disabled_granted_user_emails()),
@@ -198,34 +198,23 @@ def push_policy_to_all_sites(token: str):
 
 
 def seed_default_policy():
-	"""Seed the Access Hub Settings Single with the protocol's default scalar
-	values and deny rule, if it has no rules yet. Idempotent. Orchestrated from
-	access_hub.setup on install."""
-	settings = frappe.get_single("Access Hub Settings")
-	if settings.rules:
+	"""Seed the Access Hub Settings Single with DEFAULT_RULES/
+	DEFAULT_ALWAYS_LOG_DOCTYPES, if it has no rules yet. Idempotent.
+	Orchestrated from access_hub.setup on install.
+
+	Built via new_doc, not get_single: a Single loaded with get_single() from
+	an existing (even if all-blank) row never re-applies field defaults
+	(is_new() is False, so Document._set_defaults() never runs) - new_doc()
+	always does, so the scalar fields (session_expiry_seconds, name_suffix,
+	etc) come straight from their JSON `default`, with nothing to duplicate
+	here."""
+	if frappe.db.exists("Access Policy Rule", {"parent": "Access Hub Settings"}):
 		return
+	settings = frappe.new_doc("Access Hub Settings")
 
-	# Seed the required scalar fields from protocol defaults. Field-level
-	# defaults in the JSON cover the desk-created case, but a freshly-installed
-	# Single loaded here has them blank — set them explicitly so save() passes.
-	for fieldname, policy_key in (
-		("session_expiry_seconds", POLICY_SESSION_EXPIRY_SECONDS),
-		("max_key_size_bytes", POLICY_MAX_KEY_SIZE_BYTES),
-		("retention_days", POLICY_RETENTION_DAYS),
-		("push_grace_days", POLICY_PUSH_GRACE_DAYS),
-		("name_suffix", POLICY_NAME_SUFFIX),
-	):
-		if not settings.get(fieldname):
-			settings.set(fieldname, POLICY_DEFAULTS[policy_key])
-
-	default_rule = POLICY_DEFAULTS[POLICY_RULES][0]
-	row = {"document_type": default_rule["doctype"], "mode": default_rule["mode"]}
-	# check the action fields named by the protocol default (no hardcoding)
-	for action in default_rule["actions"]:
-		row[f"action_{action}"] = 1
-	settings.append("rules", row)
-
-	for doctype in POLICY_DEFAULTS[POLICY_ALWAYS_LOG_DOCTYPES]:
+	for row in DEFAULT_RULES:
+		settings.append("rules", row)
+	for doctype in DEFAULT_ALWAYS_LOG_DOCTYPES:
 		settings.append("always_log_doctypes", {"document_type": doctype})
 
 	settings.save(ignore_permissions=True)
