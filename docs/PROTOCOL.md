@@ -165,8 +165,20 @@ Grant is autonamed `field:jti`, so filtering by name alone would ignore the
 site). Without it, any enrolled client — every one of which legitimately holds a
 token — could end or re-activate another site's grant with an arbitrary
 `logout_reason`, or file logs under another site's jti and pick up that grant's
-`user_email`. `push_logs` is additionally capped at `MAX_PUSH_BYTES` per call, so
-one client cannot fill the issuer's disk.
+`user_email`.
+
+**`push_logs` size cap.** `lines` is capped at `MAX_PUSH_BYTES` (8 MiB) per call,
+measured **in bytes on both sides**, so one client cannot fill the issuer's disk.
+The constant lives in the shared `protocol.py` rather than hub-only for a reason:
+the hub rejects an oversized body outright, so a client that doesn't know the
+number cannot split at the right place — it re-sends the same rejected payload
+every cycle, never advances its pushed offset, and eventually loses the file to
+retention. A conforming client therefore **chunks on line boundaries** and
+advances its offset per accepted chunk, so a mid-sequence failure keeps what
+landed and resumes rather than duplicating the tail. A single line longer than the
+cap has no boundary to split on, so it is truncated to fit while the offset still
+advances past the whole line — a truncated line beats the whole file stalling on it
+forever.
 
 ### Guard
 | method | auth | payload | returns |

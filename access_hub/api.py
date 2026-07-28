@@ -6,8 +6,8 @@ from urllib.parse import quote
 
 import frappe
 
-from access_hub.constants import MAX_PUSH_BYTES
 from access_hub.protocol import (
+	MAX_PUSH_BYTES,
 	TRANSPORT_TOKEN_HEADER,
 	AccessProtocolError,
 	TransportAuthError,
@@ -149,7 +149,13 @@ def push_logs(
 	# arbitrary attacker-named files and rows.
 	if not frappe.db.exists("Access Grant", {"jti": jti, "remote_site": site.name}):
 		raise TransportAuthError("jti is not a grant of the authenticated site.")
-	if len(lines or "") > MAX_PUSH_BYTES:
+	# Bytes, not len(str): the guard chunks to a byte cap (sync._split_chunks), so
+	# counting characters here would disagree with it on any multi-byte content -
+	# in the permissive direction, which is the one that matters for a disk-fill
+	# guard. A conforming client never trips this; append_lines writes whatever
+	# arrives to the issuer's disk, and the hub is the component every tenant
+	# depends on, so one looping client must not be able to fill it.
+	if len((lines or "").encode()) > MAX_PUSH_BYTES:
 		frappe.throw(f"Payload too large; cap is {MAX_PUSH_BYTES} bytes per call.")
 
 	added = append_lines(site.name, jti, log_kind, lines or "")

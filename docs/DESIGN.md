@@ -265,22 +265,22 @@ compute a `min()` of the two — it just applies the policy value. It is
 **idle-based** (Frappe semantics); there is **no absolute wall-clock cap** — an
 actively-used session refreshes and can persist up to the idle limit.
 
-`session_expiry_seconds` is floored on the hub (`MIN_SESSION_EXPIRY_SECONDS`) and
-a 0/absent value is clamped to a fallback on the guard
-(`IDLE_EXPIRY_FALLBACK_SECONDS`). Deprovisioning is deliberately **not** an
-operator-tunable off switch: Frappe's `reqd`/`non_negative` both permit 0 on an
-Int field, and treating 0 as "never idle out" would leave an ephemeral System
-Manager session alive for Frappe's site-wide 10-day default with the User row
-never deleted at all.
+`session_expiry_seconds = 0` means **"add no window of our own"** — not "never
+expire". Frappe's session middleware still expires the session on its own
+site-wide schedule; 0 simply delegates the *when* to Frappe instead of enforcing
+a shorter one. What 0 does **not** disable is the reap: the grant file is still
+dropped and the ephemeral User row still deleted once the session is gone,
+whoever killed it. That is why the guard has no floor or fallback for this value
+— there is nothing unsafe to clamp.
 
 - **Scheduled reaper (primary), `scheduler_event` every ~15 min:** for each
   ephemeral session, if idle beyond the effective expiry → kill the session
   (delete `tabSessions` rows + clear Redis); when an ephemeral user has **zero
   live sessions** → delete the user. Reaping a grant whose session is already
   gone happens on every tick regardless of how the idle window is configured —
-  there is no "idle-expiry disabled" early return, or a stale grant plus its
-  System Manager User row would live forever. Grant files are authoritative, so
-  this survives downtime / dropped jobs / never-logout.
+  there is no "idle-expiry disabled" early return, so with expiry 0 the guard
+  kills nothing itself but still cleans up after Frappe's own expiry. Grant files
+  are authoritative, so this survives downtime / dropped jobs / never-logout.
 - **Session-tied cleanup (secondary), `on_logout` hook:** tear the user down
   immediately on logout (with logout reason recorded) so early-finished sessions
   don't linger to the next tick.
