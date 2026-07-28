@@ -11,6 +11,13 @@ CONF_HUB_PUBLIC_KEY_LOCAL = "access_hub_public_key"  # paserk k4.public — hub'
 # aud = transport_token_hash(client transport token); exp = iat + GRANT_TTL.
 GRANT_TTL_SECONDS_DEFAULT = 120  # URL redemption deadline, NOT session length - browser redirects immediately
 
+# --- Policy floors ------------------------------------------------------------
+# Lower bound on session_expiry_seconds, enforced in AccessHubSettings.validate.
+# Guards against 0 ("never idle out"), which Frappe's reqd/non_negative both
+# allow on an Int field and which would otherwise be signed into a policy - see
+# the guard's IDLE_EXPIRY_FALLBACK_SECONDS for the client-side backstop.
+MIN_SESSION_EXPIRY_SECONDS = 60
+
 # --- Policy token minting -----------------------------------------------------
 # exp exists only because verify_and_decode() requires it on every token,
 # uniformly - not because a policy token needs its own staleness window (it's

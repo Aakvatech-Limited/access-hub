@@ -236,9 +236,15 @@ ephemeral System Manager would just edit "deny User" away).
 
 **Enforcement mechanics.** The ephemeral user has System Manager, so DB
 permissions can't gate anything — enforcement is entirely guard **code** keyed on
-"is this an ephemeral session?" (read from the grant file):
-- **deny** → block the op before write (`validate` / before-write hook),
-- **warn** → a warn interstitial before proceeding, then log + allow.
+"is this an ephemeral session?" (read from the grant file, via
+`grants.current_grant()`: the session's sid if it maps to a grant, else the
+current user's newest grant — a background job has no real sid, and keying on sid
+alone let every queued/bulk op through unenforced):
+- **deny** → block the op before write (`before_validate` — deliberately not
+  `validate`, which is skipped under `ignore_validate=True`; plus
+  `before_update_after_submit`, `before_cancel`, `on_trash`, `before_rename`),
+- **warn** → a non-blocking `msgprint` alert, then log + allow. (Not a
+  confirm-then-proceed interstitial — nothing gates on acknowledgement.)
 
 **Prevention vs. detection boundary (accepted).** The guard is app code; an
 attacker with server-script (Python) execution could sidestep hooks. Accepted —
@@ -252,19 +258,29 @@ acceptable given the file is already out of desk reach.
 
 ## Session & deprovisioning (must be bulletproof)
 
-**Session lifetime = idle timeout = `min(AccessHubSettings.session_expiry, site
-session_expiry)`.** `session_expiry` (default 6h) is an Access Hub Settings field;
-the effective duration is the lower of it and the client site's own System
-Settings value. It is **idle-based** (Frappe semantics). There is **no absolute
-wall-clock cap** — an actively-used session refreshes and can persist up to the
-idle limit.
+**Session lifetime = idle timeout = `AccessHubSettings.session_expiry_seconds`**
+(default 6h). Policy-only: Frappe's own site-wide `session_expiry` is enforced
+separately by its session middleware on every request, so the guard does not
+compute a `min()` of the two — it just applies the policy value. It is
+**idle-based** (Frappe semantics); there is **no absolute wall-clock cap** — an
+actively-used session refreshes and can persist up to the idle limit.
+
+`session_expiry_seconds` is floored on the hub (`MIN_SESSION_EXPIRY_SECONDS`) and
+a 0/absent value is clamped to a fallback on the guard
+(`IDLE_EXPIRY_FALLBACK_SECONDS`). Deprovisioning is deliberately **not** an
+operator-tunable off switch: Frappe's `reqd`/`non_negative` both permit 0 on an
+Int field, and treating 0 as "never idle out" would leave an ephemeral System
+Manager session alive for Frappe's site-wide 10-day default with the User row
+never deleted at all.
 
 - **Scheduled reaper (primary), `scheduler_event` every ~15 min:** for each
   ephemeral session, if idle beyond the effective expiry → kill the session
   (delete `tabSessions` rows + clear Redis); when an ephemeral user has **zero
-  live sessions** → delete the user. Enforcing the *lower* bound ourselves matters
-  because Frappe's `session_expiry` is global and may be higher than ours. Grant
-  files are authoritative, so this survives downtime / dropped jobs / never-logout.
+  live sessions** → delete the user. Reaping a grant whose session is already
+  gone happens on every tick regardless of how the idle window is configured —
+  there is no "idle-expiry disabled" early return, or a stale grant plus its
+  System Manager User row would live forever. Grant files are authoritative, so
+  this survives downtime / dropped jobs / never-logout.
 - **Session-tied cleanup (secondary), `on_logout` hook:** tear the user down
   immediately on logout (with logout reason recorded) so early-finished sessions
   don't linger to the next tick.

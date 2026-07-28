@@ -7,6 +7,7 @@ from frappe.model.document import Document
 
 from access_hub.constants import (
 	CONF_HUB_PUBLIC_KEY_LOCAL,
+	MIN_SESSION_EXPIRY_SECONDS,
 	POLICY_TOKEN_CACHE_KEY,
 	POLICY_TOKEN_CACHE_TTL_SECONDS,
 	POLICY_TOKEN_TTL_DAYS,
@@ -72,6 +73,20 @@ class AccessHubSettings(Document):
 					GUARD_CONF_HUB_URL: frappe.utils.get_url(),
 					GUARD_CONF_HUB_PUBLIC_KEY: public_key,
 				},
+			)
+
+	def validate(self):
+		# `reqd: 1` does NOT reject 0 on an Int field (_get_missing_mandatory_fields
+		# tests cstr(value), and cstr(0) == "0" is content), and non_negative
+		# permits it - so without this an operator can save 0 and ship it in a
+		# signed policy. Deprovisioning is not a toggle: the guard clamps a 0 to
+		# its own fallback anyway, but refusing it here is what makes the setting
+		# mean what it says.
+		if not self.session_expiry_seconds or int(self.session_expiry_seconds) < MIN_SESSION_EXPIRY_SECONDS:
+			frappe.throw(
+				frappe._("Maximum Session Lifetime must be at least {0} seconds.").format(
+					MIN_SESSION_EXPIRY_SECONDS
+				)
 			)
 
 	def on_update(self):
