@@ -187,7 +187,9 @@ forever.
 | `access_guard.api.receive_policy` (allow_guest) | the policy token itself | `{ token }` | `{ ok }` |
 
 All error responses use `AccessProtocolError.as_response()` →
-`{ "error": { "code", "pv", "message" } }` with the class's `http_status`.
+`{ "error": { "code", "pv", "message" } }` with the class's `http_status_code`.
+Like every Frappe whitelisted return value, that sits under the `message`
+envelope on the wire: `{ "message": { "error": { ... } } }`.
 
 ## 6. Grant file (`site/private/access_guard/grants.json`)
 

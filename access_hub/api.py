@@ -111,7 +111,7 @@ def ingest_endpoint(fn):
 			site = _authenticate_remote_site()
 			return fn(site, **kwargs)
 		except AccessProtocolError as e:
-			frappe.local.response.http_status_code = e.http_status
+			frappe.local.response["http_status_code"] = e.http_status_code
 			return e.as_response()
 
 	return frappe.whitelist(allow_guest=True)(wrapper)

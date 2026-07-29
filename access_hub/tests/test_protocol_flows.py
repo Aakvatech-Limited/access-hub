@@ -469,7 +469,7 @@ class TestIngestAuth(HubTestCase):
 
 		result = self._call_with_bearer(get_policy, self.plaintext_token, pv=PV + 1)
 		self.assertEqual(result["error"]["code"], ProtocolVersionError.code)
-		self.assertEqual(frappe.local.response.get("http_status_code"), ProtocolVersionError.http_status)
+		self.assertEqual(frappe.local.response.get("http_status_code"), ProtocolVersionError.http_status_code)
 
 	def test_transport_token_hash_matches(self):
 		self.site.reload()
