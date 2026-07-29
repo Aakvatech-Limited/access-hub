@@ -90,7 +90,15 @@ class AccessHubSettings(Document):
 		except ClientNotConfiguredError:
 			return
 
-		frappe.cache.set_value(POLICY_TOKEN_CACHE_KEY, token, expires_in_sec=POLICY_TOKEN_CACHE_TTL_SECONDS)
+		# Both after commit: the token describes settings that may still roll back,
+		# and publishing one that never landed would have guards enforcing it for
+		# the full cache TTL (get_current_policy_token serves the cache first).
+		def _publish():
+			frappe.cache.set_value(
+				POLICY_TOKEN_CACHE_KEY, token, expires_in_sec=POLICY_TOKEN_CACHE_TTL_SECONDS
+			)
+
+		frappe.db.after_commit.add(_publish)
 		frappe.enqueue(push_policy_to_all_sites, queue="long", enqueue_after_commit=True, token=token)
 
 	def as_policy_dict(self) -> dict:

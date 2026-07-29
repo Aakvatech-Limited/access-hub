@@ -18,7 +18,7 @@ GRANT_TTL_SECONDS_DEFAULT = 120  # URL redemption deadline, NOT session length -
 # comfortably outlasts POLICY_TOKEN_CACHE_TTL_SECONDS so a cached token is
 # never expired.
 POLICY_TOKEN_TTL_DAYS = 3
-# A Settings save busts this immediately (republish_policy) regardless of TTL;
+# A committed Settings save busts this (republish_policy) regardless of TTL;
 # the TTL only bounds staleness for anything that skips that path.
 POLICY_TOKEN_CACHE_TTL_SECONDS = 24 * 60 * 60
 POLICY_TOKEN_CACHE_KEY = "access_hub_current_policy_token"
