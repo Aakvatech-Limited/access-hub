@@ -6,9 +6,22 @@
 // grant for the current user and redirects to the guard (same flow as the form
 // button). request_access enforces read permission server-side.
 frappe.listview_settings["Remote Site"] = {
+	// Not in the list's default field set (only in_list_view fields are), and
+	// both the indicator and the button read it.
+	add_fields: ["access_disabled"],
+
+	get_indicator(doc) {
+		if (doc.access_disabled) {
+			return [__("Disabled"), "grey", "access_disabled,=,1"];
+		}
+		return [__("Enabled"), "green", "access_disabled,=,0"];
+	},
+
 	button: {
+		// Hidden for a disabled site — request_access refuses it server-side
+		// regardless.
 		show(doc) {
-			return doc.name;
+			return !doc.access_disabled;
 		},
 		get_label() {
 			return __("Request Access");

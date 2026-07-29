@@ -106,6 +106,12 @@ The policy is delivered as a **PASETO `v4.public` token** whose claims are the p
 needed for a pushed policy) and writes `{policy, verified_at}` to the policy file. The token itself
 is deliberately **not** kept — only its verified contents.
 
+**One token per client**, signed and cached per Remote Site rather than once hub-wide: `access_disabled`
+is settable both hub-wide (Access Hub Settings) and per site (Remote Site), and the hub ships the
+**OR** of the two in that site's token. The guard therefore still sees exactly one flag and needs no
+notion of *which* level disabled it. Every other key is identical across clients today; a site's own
+policy is re-signed and pushed when its flag flips, so nothing waits for the hourly pull.
+
 Policy object example:
 
 ```json

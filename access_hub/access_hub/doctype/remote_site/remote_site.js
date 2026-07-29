@@ -18,19 +18,23 @@ frappe.ui.form.on("Remote Site", {
 
 		// Any user who can see this site (Desk User / Agent get read-only) can
 		// request access for themselves — mints a grant attributed to them.
-		frm.add_custom_button(__("Request Access"), () => {
-			frappe.call({
-				method: "access_hub.api.request_access",
-				args: { remote_site: frm.doc.name },
-				freeze: true,
-				freeze_message: __("Requesting access..."),
-				callback: (r) => {
-					if (r.message && r.message.redirect_url) {
-						window.open(r.message.redirect_url, "_blank");
-					}
-				},
+		// Hidden while access to this site is disabled; request_access refuses
+		// it server-side regardless.
+		if (!frm.doc.access_disabled) {
+			frm.add_custom_button(__("Request Access"), () => {
+				frappe.call({
+					method: "access_hub.api.request_access",
+					args: { remote_site: frm.doc.name },
+					freeze: true,
+					freeze_message: __("Requesting access..."),
+					callback: (r) => {
+						if (r.message && r.message.redirect_url) {
+							window.open(r.message.redirect_url, "_blank");
+						}
+					},
+				});
 			});
-		});
+		}
 
 		// Rotating the token writes to the doc, so gate on write permission —
 		// read-only roles never see this, and rotate_transport_token's

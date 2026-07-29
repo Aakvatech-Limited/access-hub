@@ -12,7 +12,7 @@ from pyseto import Key
 from access_hub.access_hub.doctype.access_grant.access_grant import create_and_mint
 from access_hub.access_hub.doctype.access_hub_settings.access_hub_settings import (
 	get_current_policy_token,
-	push_policy_to_all_sites,
+	push_policy_to_sites,
 )
 from access_hub.access_hub.doctype.session_log_file.session_log_file import (
 	append_lines,
@@ -21,6 +21,7 @@ from access_hub.access_hub.doctype.session_log_file.session_log_file import (
 )
 from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL, POLICY_TOKEN_CACHE_KEY, TRANSPORT_TOKEN_MIN_LEN
 from access_hub.protocol import (
+	POLICY_ACCESS_DISABLED,
 	POLICY_RULES,
 	PV,
 	TRANSPORT_TOKEN_HEADER,
@@ -62,7 +63,9 @@ class HubTestCase(FrappeTestCase):
 	"""
 
 	def setUp(self):
-		frappe.cache.delete_value(POLICY_TOKEN_CACHE_KEY)
+		# One key per site (policy_token_cache_key) - wildcard, since the sites a
+		# previous test cached under are already gone by now.
+		frappe.cache.delete_keys(f"{POLICY_TOKEN_CACHE_KEY}:*")
 
 	def make_remote_site(self, host, transport_token=None, **fields):
 		site = frappe.get_doc(
@@ -239,7 +242,8 @@ class TestPolicyToken(HubTestCase):
 			seed_default_policy()
 			settings = frappe.get_single("Access Hub Settings")
 
-		token = get_current_policy_token()
+		site = self.make_remote_site(f"test-policy-{self._testMethodName}.localhost")
+		token = get_current_policy_token(site)
 		pub = get_public_key()
 		decoded = pyseto.decode(pub, token)
 		claims = json.loads(decoded.payload)
@@ -250,7 +254,7 @@ class TestPolicyToken(HubTestCase):
 		self.assertTrue(any(r["doctype"] == "User" and r["mode"] == "deny" for r in claims[POLICY_RULES]))
 
 	def test_blacklisted_users_and_access_disabled_round_trip_into_policy_dict(self):
-		from access_hub.protocol import POLICY_ACCESS_DISABLED, POLICY_BLACKLISTED_EMAILS
+		from access_hub.protocol import POLICY_BLACKLISTED_EMAILS
 
 		settings = frappe.get_single("Access Hub Settings")
 		if not settings.rules:
@@ -358,7 +362,7 @@ class TestDisabledAndDeletedUserEviction(HubTestCase):
 			user.save(ignore_permissions=True)
 
 		self.assertTrue(
-			any(c.args and c.args[0] is push_policy_to_all_sites for c in mock_enqueue.call_args_list)
+			any(c.args and c.args[0] is push_policy_to_sites for c in mock_enqueue.call_args_list)
 		)
 
 	def test_user_delete_triggers_policy_republish(self):
@@ -374,7 +378,7 @@ class TestDisabledAndDeletedUserEviction(HubTestCase):
 			frappe.db.commit()
 
 		self.assertTrue(
-			any(c.args and c.args[0] is push_policy_to_all_sites for c in mock_enqueue.call_args_list)
+			any(c.args and c.args[0] is push_policy_to_sites for c in mock_enqueue.call_args_list)
 		)
 
 	def test_user_reenable_triggers_policy_republish(self):
@@ -391,7 +395,7 @@ class TestDisabledAndDeletedUserEviction(HubTestCase):
 			user.save(ignore_permissions=True)
 
 		self.assertTrue(
-			any(c.args and c.args[0] is push_policy_to_all_sites for c in mock_enqueue.call_args_list)
+			any(c.args and c.args[0] is push_policy_to_sites for c in mock_enqueue.call_args_list)
 		)
 
 	def test_new_user_creation_triggers_policy_republish(self):
@@ -401,7 +405,7 @@ class TestDisabledAndDeletedUserEviction(HubTestCase):
 			self.make_user(f"evict-push-new-{self._testMethodName}@example.com", first_name="PushTest")
 
 		self.assertTrue(
-			any(c.args and c.args[0] is push_policy_to_all_sites for c in mock_enqueue.call_args_list)
+			any(c.args and c.args[0] is push_policy_to_sites for c in mock_enqueue.call_args_list)
 		)
 
 
@@ -650,6 +654,86 @@ class TestAccessDisabledAndBlacklist(HubTestCase):
 			"Access Grant", {"remote_site": self.site.name}, "jti", order_by="creation desc"
 		)
 		self.addCleanup(frappe.delete_doc, "Access Grant", jti, True, None, True)
+
+
+class TestPerSiteAccessDisabled(HubTestCase):
+	"""A Remote Site's own access_disabled must refuse requests to that site and
+	reach only that site's guard as policy.access_disabled — the hub-wide switch
+	stays off throughout, so anything asserted here is site-scoped."""
+
+	def setUp(self):
+		super().setUp()
+		self.disabled = self.make_remote_site(
+			f"test-site-off-{self._testMethodName}.localhost", access_disabled=1
+		)
+		self.enabled = self.make_remote_site(f"test-site-on-{self._testMethodName}.localhost")
+		self.settings = frappe.get_single("Access Hub Settings")
+
+	def _policy_of(self, site) -> dict:
+		return decode_claims(get_current_policy_token(site))
+
+	def test_flag_reaches_only_its_own_sites_policy(self):
+		self.assertTrue(self._policy_of(self.disabled)[POLICY_ACCESS_DISABLED])
+		self.assertFalse(self._policy_of(self.enabled)[POLICY_ACCESS_DISABLED])
+
+	def test_hub_wide_switch_disables_every_site(self):
+		orig = self.settings.access_disabled
+		self.addCleanup(self._restore_hub_switch, orig)
+		self.settings.db_set("access_disabled", 1)
+
+		# Cached per site, and the fixtures above may already have populated
+		# both keys — bust them so this reads the hub switch, not a stale token.
+		frappe.cache.delete_keys(f"{POLICY_TOKEN_CACHE_KEY}:*")
+		self.assertTrue(self._policy_of(self.enabled)[POLICY_ACCESS_DISABLED])
+		self.assertTrue(self._policy_of(self.disabled)[POLICY_ACCESS_DISABLED])
+
+	def _restore_hub_switch(self, orig):
+		frappe.get_single("Access Hub Settings").db_set("access_disabled", orig)
+		frappe.db.commit()
+
+	def test_request_access_refused_for_disabled_site(self):
+		from access_hub.api import request_access
+
+		email = f"site-off-caller-{self._testMethodName}@example.com"
+		caller = self.make_user(email, first_name="SiteOff")
+		caller.add_roles("Desk User")
+		self.addCleanup(frappe.set_user, "Administrator")
+		frappe.set_user(email)
+
+		with self.assertRaises(frappe.ValidationError):
+			request_access(remote_site=self.disabled.name)
+
+		# Same caller, same moment, only the site differs.
+		result = request_access(remote_site=self.enabled.name)
+		self.assertIn("redirect_url", result)
+		jti = frappe.db.get_value(
+			"Access Grant", {"remote_site": self.enabled.name}, "jti", order_by="creation desc"
+		)
+		self.addCleanup(frappe.delete_doc, "Access Grant", jti, True, None, True)
+
+	def test_toggling_the_flag_pushes_that_site_only(self):
+		from unittest.mock import patch
+
+		with patch("frappe.enqueue") as mock_enqueue:
+			self.enabled.access_disabled = 1
+			self.enabled.save(ignore_permissions=True)
+
+		pushes = [c for c in mock_enqueue.call_args_list if c.args and c.args[0] is push_policy_to_sites]
+		self.assertTrue(pushes, "flipping the flag must enqueue a policy push")
+		tokens = pushes[-1].kwargs["tokens"]
+		self.assertEqual(list(tokens), [self.enabled.name])
+		self.assertTrue(decode_claims(tokens[self.enabled.name])[POLICY_ACCESS_DISABLED])
+
+	def test_unrelated_field_edit_does_not_republish(self):
+		from unittest.mock import patch
+
+		with patch("frappe.enqueue") as mock_enqueue:
+			self.enabled.is_fc_site = 1
+			self.enabled.save(ignore_permissions=True)
+
+		self.assertFalse(
+			[c for c in mock_enqueue.call_args_list if c.args and c.args[0] is push_policy_to_sites]
+		)
 
 
 class TestIngestEndpointsOverRealHttp(HubTestCase):

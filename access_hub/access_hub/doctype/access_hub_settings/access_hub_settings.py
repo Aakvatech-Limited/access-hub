@@ -77,33 +77,55 @@ class AccessHubSettings(Document):
 	def on_update(self):
 		self.republish_policy()
 
-	def republish_policy(self):
+	def republish_policy(self, site: "Document | None" = None):
 		"""Rebuild + push the signed policy token. Callable directly by
 		anything that needs to force a republish outside of a Settings save
 		(e.g. user_events on User disable/delete) without depending on
-		on_update's other side effects."""
+		on_update's other side effects.
+
+		`site` narrows the republish to one Remote Site — used when only that
+		site's own policy input changed (its access_disabled flag), so the
+		other sites keep their still-valid cached tokens instead of every one
+		being re-signed and re-pushed."""
 		if self.is_new():
 			return
 
+		sites = [site] if site else None
 		try:
-			token = self.build_and_sign_policy_token()
+			# Cache-bust and push both work off the same freshly signed tokens,
+			# so a push can never carry a token the cache doesn't have.
+			tokens = self.sign_policy_tokens(sites)
 		except ClientNotConfiguredError:
 			return
 
-		# Both after commit: the token describes settings that may still roll back,
-		# and publishing one that never landed would have guards enforcing it for
-		# the full cache TTL (get_current_policy_token serves the cache first).
+		# Both after commit: the tokens describe settings that may still roll
+		# back, and publishing one that never landed would have guards enforcing
+		# it for the full cache TTL (get_current_policy_token serves the cache
+		# first).
 		def _publish():
-			frappe.cache.set_value(
-				POLICY_TOKEN_CACHE_KEY, token, expires_in_sec=POLICY_TOKEN_CACHE_TTL_SECONDS
-			)
+			for site_name, token in tokens.items():
+				frappe.cache.set_value(
+					policy_token_cache_key(site_name), token, expires_in_sec=POLICY_TOKEN_CACHE_TTL_SECONDS
+				)
 
 		frappe.db.after_commit.add(_publish)
-		frappe.enqueue(push_policy_to_all_sites, queue="long", enqueue_after_commit=True, token=token)
+		frappe.enqueue(push_policy_to_sites, queue="long", enqueue_after_commit=True, tokens=tokens)
 
-	def as_policy_dict(self) -> dict:
+	def sign_policy_tokens(self, sites: "list[Document] | None" = None) -> dict[str, str]:
+		"""`{remote_site_name: signed policy token}` for `sites` (every Remote
+		Site when omitted). One dict, so callers that both cache and push work
+		from identical tokens."""
+		if sites is None:
+			sites = [
+				frappe.get_doc("Remote Site", name) for name in frappe.get_all("Remote Site", pluck="name")
+			]
+		return {site.name: self.build_and_sign_policy_token(site) for site in sites}
+
+	def as_policy_dict(self, site: "Document | None" = None) -> dict:
 		"""Build the normalized policy object (protocol.POLICY_* keys) from this
-		Single doctype's fields, per docs/PROTOCOL.md §4."""
+		Single doctype's fields, per docs/PROTOCOL.md §4. `site` is the Remote
+		Site this policy is destined for — it contributes its own
+		access_disabled flag (see POLICY_ACCESS_DISABLED below)."""
 		rules = []
 		for row in self.rules:
 			actions = [action for action in POLICY_ACTIONS if row.get(f"action_{action}")]
@@ -123,7 +145,11 @@ class AccessHubSettings(Document):
 			POLICY_RETENTION_DAYS: self.retention_days,
 			POLICY_PUSH_GRACE_DAYS: self.push_grace_days,
 			POLICY_NAME_SUFFIX: self.name_suffix or "",
-			POLICY_ACCESS_DISABLED: bool(self.access_disabled),
+			# Hub-wide switch OR this one site's own. The guard enforces a single
+			# flag (reap every live grant, refuse new ones) and has no use for
+			# knowing which level turned it on, so the two collapse here rather
+			# than shipping a second key every guard would have to OR itself.
+			POLICY_ACCESS_DISABLED: bool(self.access_disabled or (site and site.access_disabled)),
 			# Unioned with disabled_granted_user_emails() (self-correcting, no cleanup needed).
 			POLICY_BLACKLISTED_EMAILS: list(blacklisted_user_emails(self) | disabled_granted_user_emails()),
 			POLICY_DISALLOW_SIMULTANEOUS_SESSIONS: bool(self.disallow_simultaneous_sessions),
@@ -140,8 +166,8 @@ class AccessHubSettings(Document):
 			return True
 		return not bool(frappe.db.get_value("User", user, "enabled"))
 
-	def build_and_sign_policy_token(self) -> str:
-		policy = self.as_policy_dict()
+	def build_and_sign_policy_token(self, site: "Document | None" = None) -> str:
+		policy = self.as_policy_dict(site)
 		claims = dict(policy)
 		claims["pv"] = PV
 		# verify_and_decode() requires exp on every token it checks (grant or
@@ -192,35 +218,48 @@ def doctype_autocomplete(txt: str | None = None) -> list:
 	return search_link("DocType", txt or "")
 
 
-def get_current_policy_token() -> str:
-	"""Return a signed policy token, cached for POLICY_TOKEN_CACHE_TTL_SECONDS so
-	the hourly pull from every guard doesn't re-sign on each request. A Settings
-	save busts this immediately (see republish_policy) - the cache TTL only
-	bounds the delay for anything that skips that path (e.g. install seeding).
+def policy_token_cache_key(site_name: str) -> str:
+	"""Cache key for one site's policy token. Per-site because the token itself
+	is (as_policy_dict folds the site's own access_disabled into the hub-wide
+	flag), so a single shared key would serve one site's kill switch to every
+	other site."""
+	return f"{POLICY_TOKEN_CACHE_KEY}:{site_name}"
+
+
+def get_current_policy_token(site: "Document") -> str:
+	"""Return `site`'s signed policy token, cached for
+	POLICY_TOKEN_CACHE_TTL_SECONDS so the hourly pull from every guard doesn't
+	re-sign on each request. A Settings save busts this immediately (see
+	republish_policy) - the cache TTL only bounds the delay for anything that
+	skips that path (e.g. install seeding).
 
 	expires=True: get_value's default would cache a miss into
 	frappe.local.cache, but set_value (called with expires_in_sec, as
 	republish_policy always does) skips that cache on writes - so a miss
 	here followed by a write there would leave frappe.local.cache stuck on a
 	stale None. expires=True avoids frappe.local.cache entirely."""
-	token = frappe.cache.get_value(POLICY_TOKEN_CACHE_KEY, expires=True)
+	key = policy_token_cache_key(site.name)
+	token = frappe.cache.get_value(key, expires=True)
 	if token:
 		return token
-	token = frappe.get_single("Access Hub Settings").build_and_sign_policy_token()
-	frappe.cache.set_value(POLICY_TOKEN_CACHE_KEY, token, expires_in_sec=POLICY_TOKEN_CACHE_TTL_SECONDS)
+	token = frappe.get_single("Access Hub Settings").build_and_sign_policy_token(site)
+	frappe.cache.set_value(key, token, expires_in_sec=POLICY_TOKEN_CACHE_TTL_SECONDS)
 	return token
 
 
-def push_policy_to_all_sites(token: str):
-	"""Best-effort push of the policy token to every registered Remote Site.
-	Failures (offline/firewalled clients) are swallowed — the guard's guaranteed
-	hourly pull covers those."""
+def push_policy_to_sites(tokens: dict[str, str]):
+	"""Best-effort push of each site's own policy token, keyed by Remote Site
+	name (see AccessHubSettings.sign_policy_tokens). Failures
+	(offline/firewalled clients) are swallowed — the guard's guaranteed hourly
+	pull covers those."""
 	import requests
 
-	for site in frappe.get_all("Remote Site", fields=["name", "host", "port", "protocol"]):
+	for site in frappe.get_all(
+		"Remote Site", filters={"name": ["in", list(tokens)]}, fields=["name", "host", "port", "protocol"]
+	):
 		url = f"{site.protocol}://{site.host}:{site.port}/api/method/access_guard.api.receive_policy"
 		try:
-			requests.post(url, json={"token": token}, timeout=30)
+			requests.post(url, json={"token": tokens[site.name]}, timeout=30)
 		except Exception:
 			frappe.log_error(title=f"access_hub: policy push to {site.name} failed")
 

@@ -384,6 +384,12 @@ The hub's registry of client sites. Key modeling decisions:
   **mutable** — the human-readable identity, editable independent of the ID.
 - **`is_fc_site` (Check)** marks Frappe-Cloud-managed sites (enrollment automation
   is a non-goal for now); there is no `enrollment_type` field.
+- **`access_disabled` (Check, off)** — per-site kill switch, same semantics as the
+  hub-wide one in Access Hub Settings but scoped to this client: `request_access`
+  refuses, and the flag rides this site's policy token (OR'd with the hub-wide
+  switch, see PROTOCOL §4) so its guard reaps every live session. Flipping it
+  re-signs and pushes **only** this site's policy. Surfaced as the list-view
+  indicator, and hides the Request Access button in both list and form.
 - **`transport_token_hash`** (read-only) stores only the SHA-256 — plaintext is
   shown once at creation/rotation and never persisted.
 - `port` (default 443), `protocol` (default https) — set at enrollment, never

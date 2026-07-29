@@ -7,6 +7,7 @@
  "field_order": [
   "host",
   "is_fc_site",
+  "access_disabled",
   "column_break_pyri",
   "port",
   "protocol",
@@ -43,6 +44,14 @@
    "fieldname": "is_fc_site",
    "fieldtype": "Check",
    "label": "Is FC Site"
+  },
+  {
+   "default": "0",
+   "description": "Refuses new access requests to this site and immediately ends every active session on it.",
+   "fieldname": "access_disabled",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Disable Access"
   },
   {
    "description": "SHA-256 of the transport token",

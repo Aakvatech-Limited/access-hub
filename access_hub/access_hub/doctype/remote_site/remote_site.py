@@ -33,6 +33,14 @@ class RemoteSite(Document):
 		if self.is_new() and not self.transport_token_hash:
 			self._apply_token(secrets.token_urlsafe(32))
 
+	def on_update(self):
+		# access_disabled is an input to this site's policy token, so a flip has
+		# to reach the guard for it to reap live sessions - push it now instead
+		# of waiting up to an hour for that site's next pull. Narrowed to this
+		# site: nothing here changes any other site's policy.
+		if self.has_value_changed("access_disabled"):
+			frappe.get_single("Access Hub Settings").republish_policy(site=self)
+
 	def _apply_token(self, plaintext: str):
 		"""Hash `plaintext` into transport_token_hash (plaintext never stored) and
 		flag it for onload to surface once. Every token-setting path (create

@@ -36,6 +36,12 @@ def request_access(remote_site: str):
 	site = frappe.get_doc("Remote Site", remote_site)
 	site.check_permission("read")
 
+	# The site's own kill switch. Also enforced guard-side (it rides that site's
+	# policy token as access_disabled), but refusing here means no token is ever
+	# minted for a disabled site in the first place.
+	if site.access_disabled:
+		frappe.throw(f"Access to {site.host} is currently disabled.")
+
 	user = frappe.session.user
 	if user in ("Administrator", "Guest"):
 		frappe.throw("Please request access as a named user, not Administrator/Guest.")
@@ -123,7 +129,7 @@ def get_policy(site):
 		get_current_policy_token,
 	)
 
-	return {"policy_token": get_current_policy_token()}
+	return {"policy_token": get_current_policy_token(site)}
 
 
 @ingest_endpoint
