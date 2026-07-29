@@ -3,6 +3,8 @@
 The problem this system solves, in the words of the consultancy that needs it.
 For how it's built, see [DESIGN.md](DESIGN.md); for the wire contract,
 [PROTOCOL.md](PROTOCOL.md); to run/operate it, [OPERATIONS.md](OPERATIONS.md).
+Frappe Cloud enrollment automation: [FC_INTEGRATION.md](FC_INTEGRATION.md) (design)
+and [FC_API.md](FC_API.md) (the press endpoints it calls).
 
 ## Problem statement
 

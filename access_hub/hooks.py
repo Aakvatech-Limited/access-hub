@@ -17,6 +17,14 @@ doc_events = {
 	}
 }
 
+# Long queue: a sweep is one unbatchable press call per site, ~36s for 100+.
+# No-ops unless FC integration is enabled and configured.
+scheduler_events = {
+	"daily_long": [
+		"access_hub.fc.daily",
+	],
+}
+
 # Access Grant deliberately keeps a dangling Link to a deleted User (the
 # audit trail must survive the user being removed / their email
 # changing) - so a User delete must not be blocked by, or cascade to,

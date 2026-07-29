@@ -728,7 +728,9 @@ class TestPerSiteAccessDisabled(HubTestCase):
 		from unittest.mock import patch
 
 		with patch("frappe.enqueue") as mock_enqueue:
-			self.enabled.is_fc_site = 1
+			# Any field that isn't a policy input. Not is_fc_site: that one now
+			# demands the FC identifiers alongside it (see RemoteSite.validate).
+			self.enabled.port = 8007
 			self.enabled.save(ignore_permissions=True)
 
 		self.assertFalse(

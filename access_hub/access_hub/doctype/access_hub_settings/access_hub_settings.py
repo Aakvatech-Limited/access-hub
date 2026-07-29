@@ -74,34 +74,41 @@ class AccessHubSettings(Document):
 				},
 			)
 
+	def validate(self):
+		# mandatory_depends_on is UI-only, so this is what enforces it for an API
+		# write, a patch or a db_set.
+		if not self.enable_fc_integration:
+			return
+		# A saved Password field reads back as a dummy "*****", which is fine - this
+		# only checks that something is set.
+		missing = [
+			field
+			for field in ("fc_team_name", "fc_api_key", "fc_api_secret")
+			if not (self.get(field) or "").strip()
+		]
+		if missing:
+			labels = ", ".join(self.meta.get_label(field) for field in missing)
+			frappe.throw(f"Frappe Cloud integration needs {labels}.")
+
 	def on_update(self):
 		self.republish_policy()
 
 	def republish_policy(self, site: "Document | None" = None):
-		"""Rebuild + push the signed policy token. Callable directly by
-		anything that needs to force a republish outside of a Settings save
-		(e.g. user_events on User disable/delete) without depending on
-		on_update's other side effects.
-
-		`site` narrows the republish to one Remote Site — used when only that
-		site's own policy input changed (its access_disabled flag), so the
-		other sites keep their still-valid cached tokens instead of every one
-		being re-signed and re-pushed."""
+		"""Rebuild + push the signed policy token. Callable outside a Settings save
+		(e.g. user_events on User disable/delete) without on_update's other side
+		effects. `site` narrows it to one Remote Site, so the rest keep their still-
+		valid cached tokens."""
 		if self.is_new():
 			return
 
 		sites = [site] if site else None
 		try:
-			# Cache-bust and push both work off the same freshly signed tokens,
-			# so a push can never carry a token the cache doesn't have.
 			tokens = self.sign_policy_tokens(sites)
 		except ClientNotConfiguredError:
 			return
 
-		# Both after commit: the tokens describe settings that may still roll
-		# back, and publishing one that never landed would have guards enforcing
-		# it for the full cache TTL (get_current_policy_token serves the cache
-		# first).
+		# Both after commit: these describe settings that may still roll back, and a
+		# token that never landed would be enforced for the full cache TTL.
 		def _publish():
 			for site_name, token in tokens.items():
 				frappe.cache.set_value(
@@ -112,9 +119,8 @@ class AccessHubSettings(Document):
 		frappe.enqueue(push_policy_to_sites, queue="long", enqueue_after_commit=True, tokens=tokens)
 
 	def sign_policy_tokens(self, sites: "list[Document] | None" = None) -> dict[str, str]:
-		"""`{remote_site_name: signed policy token}` for `sites` (every Remote
-		Site when omitted). One dict, so callers that both cache and push work
-		from identical tokens."""
+		"""`{remote_site_name: token}` for `sites`, or every Remote Site. One dict, so
+		the cache and the push can never disagree."""
 		if sites is None:
 			sites = [
 				frappe.get_doc("Remote Site", name) for name in frappe.get_all("Remote Site", pluck="name")
@@ -122,10 +128,8 @@ class AccessHubSettings(Document):
 		return {site.name: self.build_and_sign_policy_token(site) for site in sites}
 
 	def as_policy_dict(self, site: "Document | None" = None) -> dict:
-		"""Build the normalized policy object (protocol.POLICY_* keys) from this
-		Single doctype's fields, per docs/PROTOCOL.md §4. `site` is the Remote
-		Site this policy is destined for — it contributes its own
-		access_disabled flag (see POLICY_ACCESS_DISABLED below)."""
+		"""The normalized policy object (protocol.POLICY_* keys) per PROTOCOL.md §4.
+		`site` is who it's for; it contributes its own access_disabled flag."""
 		rules = []
 		for row in self.rules:
 			actions = [action for action in POLICY_ACTIONS if row.get(f"action_{action}")]
@@ -145,10 +149,8 @@ class AccessHubSettings(Document):
 			POLICY_RETENTION_DAYS: self.retention_days,
 			POLICY_PUSH_GRACE_DAYS: self.push_grace_days,
 			POLICY_NAME_SUFFIX: self.name_suffix or "",
-			# Hub-wide switch OR this one site's own. The guard enforces a single
-			# flag (reap every live grant, refuse new ones) and has no use for
-			# knowing which level turned it on, so the two collapse here rather
-			# than shipping a second key every guard would have to OR itself.
+			# Hub-wide switch OR this site's own: the guard enforces one flag and has
+			# no use for knowing which level set it.
 			POLICY_ACCESS_DISABLED: bool(self.access_disabled or (site and site.access_disabled)),
 			# Unioned with disabled_granted_user_emails() (self-correcting, no cleanup needed).
 			POLICY_BLACKLISTED_EMAILS: list(blacklisted_user_emails(self) | disabled_granted_user_emails()),
@@ -219,10 +221,8 @@ def doctype_autocomplete(txt: str | None = None) -> list:
 
 
 def policy_token_cache_key(site_name: str) -> str:
-	"""Cache key for one site's policy token. Per-site because the token itself
-	is (as_policy_dict folds the site's own access_disabled into the hub-wide
-	flag), so a single shared key would serve one site's kill switch to every
-	other site."""
+	"""Per-site, because the token is: a shared key would serve one site's kill
+	switch to every other site."""
 	return f"{POLICY_TOKEN_CACHE_KEY}:{site_name}"
 
 

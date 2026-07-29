@@ -6,12 +6,17 @@
  "engine": "InnoDB",
  "field_order": [
   "host",
-  "is_fc_site",
   "access_disabled",
   "column_break_pyri",
   "port",
   "protocol",
-  "transport_token_hash"
+  "transport_token_hash",
+  "fc_section",
+  "is_fc_site",
+  "fc_site_id",
+  "fc_column_break",
+  "fc_team",
+  "fc_enrolled_at"
  ],
  "fields": [
   {
@@ -41,9 +46,11 @@
   },
   {
    "default": "0",
+   "description": "Set by the Frappe Cloud sync; cleared when the site is no longer listed.",
    "fieldname": "is_fc_site",
    "fieldtype": "Check",
-   "label": "Is FC Site"
+   "label": "Is FC Site",
+   "read_only": 1
   },
   {
    "default": "0",
@@ -66,13 +73,45 @@
   {
    "fieldname": "column_break_pyri",
    "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.is_fc_site",
+   "fieldname": "fc_section",
+   "fieldtype": "Section Break",
+   "label": "Frappe Cloud"
+  },
+  {
+   "fieldname": "fc_site_id",
+   "fieldtype": "Data",
+   "label": "FC Site ID",
+   "no_copy": 1,
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "fc_column_break",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "fc_team",
+   "fieldtype": "Data",
+   "label": "FC Team",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fc_enrolled_at",
+   "fieldtype": "Datetime",
+   "label": "FC Enrolled At",
+   "no_copy": 1,
+   "read_only": 1
   }
  ],
  "links": [],
- "modified": "2026-07-28 14:53:21.732027",
- "modified_by": "Administrator",
+ "modified": "2026-07-29 20:06:52.059521",
+ "modified_by": "sagar@aakvatech.com",
  "module": "Access Hub",
  "name": "Remote Site",
+ "naming_rule": "Random",
  "owner": "Administrator",
  "permissions": [
   {

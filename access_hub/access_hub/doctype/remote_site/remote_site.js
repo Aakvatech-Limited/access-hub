@@ -55,10 +55,25 @@ frappe.ui.form.on("Remote Site", {
 							method: "access_hub.access_hub.doctype.remote_site.remote_site.rotate_transport_token",
 							args: { remote_site: frm.doc.name, token: values.token || null },
 							freeze: true,
+							freeze_message: __("Updating token..."),
 							callback: (r) => {
-								if (r.message) {
-									show_config_dialog(frm, r.message);
+								if (!r.message) {
+									return;
 								}
+								// On an FC site the hub applies the token itself, so there is
+								// nothing for the operator to copy.
+								if (r.message.pushed_to_fc) {
+									frappe.msgprint({
+										title: __("Token Updated"),
+										indicator: "green",
+										message: __(
+											"The new token has been applied to {0} via Frappe Cloud.",
+											[r.message.host]
+										),
+									});
+									return;
+								}
+								show_config_dialog(frm, r.message.config);
 							},
 						});
 					},

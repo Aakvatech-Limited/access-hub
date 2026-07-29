@@ -2,6 +2,8 @@
 
 Central issuer for ephemeral Frappe site access.
 
+KEEP COMMENTS/DOCSTRINGS CONCISE!
+
 ## Related app
 - Sibling app is `access_guard` (client-side enforcement/logging) — check there before duplicating logic.
 

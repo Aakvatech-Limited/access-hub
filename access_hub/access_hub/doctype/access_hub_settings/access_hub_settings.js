@@ -19,6 +19,28 @@ frappe.ui.form.on("Access Hub Settings", {
 		frm.set_query("document_type", "rules", doctype_query);
 	},
 
+	// A Button field, not a toolbar action, so it sits beside the config it acts on
+	// and hides with the section.
+	fc_sync_now(frm) {
+		if (frm.is_dirty()) {
+			frappe.msgprint(__("Please save the settings first."));
+			return;
+		}
+		frappe.call({
+			method: "access_hub.fc.sync_now",
+			freeze: true,
+			freeze_message: __("Queueing Frappe Cloud sync..."),
+			callback: () => {
+				frappe.show_alert({
+					message: __(
+						"Frappe Cloud sync queued. Check Error Log if sites don't appear."
+					),
+					indicator: "green",
+				});
+			},
+		});
+	},
+
 	access_disabled(frm) {
 		if (!frm.doc.access_disabled) {
 			return;
