@@ -5,7 +5,7 @@ Never log a press config response — it echoes the site's secrets (FC_API §6).
 """
 
 import frappe
-from frappe.frappeclient import FrappeClient
+from frappe.frappeclient import FrappeClient, FrappeException
 from frappe.utils import now_datetime
 
 from access_hub.constants import CONF_HUB_PUBLIC_KEY_LOCAL
@@ -37,6 +37,21 @@ class FrappeCloudClient(FrappeClient):
 			api_secret=settings.get_password("fc_api_secret"),
 		)
 		self.headers[FC_TEAM_HEADER] = settings.fc_team_name
+
+	def post_process(self, response):
+		"""On a non-JSON body (a 502/504 from press's gateway, an empty response,
+		a plain "Internal Server Error") the base client's ValueError just tells
+		you the JSON decoder failed at char 0 - useless once it's several hops
+		removed in a log. Fold in the status and a body snippet instead; safe to
+		log, since a decode failure means this isn't the config-echoing success
+		response that FC_API §6 bans logging."""
+		try:
+			return super().post_process(response)
+		except ValueError:
+			snippet = response.text[:500].strip() or "<empty body>"
+			raise FrappeException(
+				f"press returned a non-JSON response (HTTP {response.status_code}): {snippet}"
+			) from None
 
 	def _get_list(self, doctype: str, **kwargs) -> list:
 		result = self.post_api("press.api.client.get_list", json={"doctype": doctype, **kwargs})
