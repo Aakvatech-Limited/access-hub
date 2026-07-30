@@ -6,6 +6,7 @@ Registered via `commands = [...]` — discovered by frappe's bench_helper as
 
 import click
 import frappe
+from frappe.commands import get_site, pass_context
 
 
 @click.command("access-hub-generate-keypair")
@@ -15,9 +16,8 @@ import frappe
 	default=False,
 	help="Overwrite an existing access_hub_private_key in site_config.json.",
 )
-@click.option("--site", help="Site to operate on (defaults to the bench-selected site).")
-@click.pass_context
-def generate_keypair(ctx, force, site):
+@pass_context
+def generate_keypair(context, force):
 	"""Generate the hub's Ed25519 PASETO keypair.
 
 	Writes the secret key (k4.secret...) to site_config.json under
@@ -26,10 +26,10 @@ def generate_keypair(ctx, force, site):
 
 	Idempotent: refuses to overwrite an existing key unless --force is passed.
 	"""
-	site = site or (ctx.obj["sites"][0] if ctx.obj.get("sites") else None)
-	if not site:
-		click.secho("No site specified. Use --site <sitename>.", fg="red")
-		raise click.exceptions.Exit(1)
+	# --site is a bench-level option, so it lands in the group's context, not
+	# ours. get_site raises SiteNotSpecifiedError, which frappe's pass_context
+	# turns into a friendly message (as it does for a bad site path).
+	site = get_site(context)
 
 	frappe.init(site=site)
 	frappe.connect()

@@ -25,8 +25,8 @@ scheduler_events = {
 	],
 }
 
-# Access Grant deliberately keeps a dangling Link to a deleted User (the
-# audit trail must survive the user being removed / their email
-# changing) - so a User delete must not be blocked by, or cascade to,
-# Access Grant rows referencing it.
-ignore_links_on_delete = ["Access Grant"]
+# Access Grant/Session Log File deliberately keep dangling Links (to a
+# deleted User, or a deleted Remote Site) - the audit trail must survive
+# the linked doc being removed, so that delete must not be blocked by, or
+# cascade to, these rows.
+ignore_links_on_delete = ["Access Grant", "Session Log File"]
