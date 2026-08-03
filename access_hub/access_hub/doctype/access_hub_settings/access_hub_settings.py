@@ -16,6 +16,8 @@ from access_hub.protocol import (
 	GUARD_CONF_HUB_URL,
 	MODE_DENY,
 	POLICY_ACCESS_DISABLED,
+	POLICY_ADOPT_ENABLED_USERS,
+	POLICY_ADOPTABLE_EMAILS,
 	POLICY_ALWAYS_LOG_DOCTYPES,
 	POLICY_BLACKLISTED_EMAILS,
 	POLICY_DISALLOW_SIMULTANEOUS_SESSIONS,
@@ -139,6 +141,10 @@ class AccessHubSettings(Document):
 
 		always_log = [row.document_type for row in self.always_log_doctypes if row.document_type]
 
+		# Unioned with disabled_granted_user_emails() (self-correcting, no cleanup
+		# needed). Bound once: POLICY_ADOPTABLE_EMAILS subtracts it below.
+		policy_blacklisted_emails = blacklisted_user_emails(self) | disabled_granted_user_emails()
+
 		return {
 			POLICY_RULES: rules,
 			POLICY_SESSION_EXPIRY_SECONDS: self.session_expiry_seconds,
@@ -152,9 +158,13 @@ class AccessHubSettings(Document):
 			# Hub-wide switch OR this site's own: the guard enforces one flag and has
 			# no use for knowing which level set it.
 			POLICY_ACCESS_DISABLED: bool(self.access_disabled or (site and site.access_disabled)),
-			# Unioned with disabled_granted_user_emails() (self-correcting, no cleanup needed).
-			POLICY_BLACKLISTED_EMAILS: list(blacklisted_user_emails(self) | disabled_granted_user_emails()),
+			POLICY_BLACKLISTED_EMAILS: list(policy_blacklisted_emails),
 			POLICY_DISALLOW_SIMULTANEOUS_SESSIONS: bool(self.disallow_simultaneous_sessions),
+			# Minus the blacklist: a denied user's grant is reaped on arrival anyway,
+			# so deleting their standing account first would be destruction in
+			# service of a session that never runs.
+			POLICY_ADOPTABLE_EMAILS: sorted(adoptable_user_emails(self) - policy_blacklisted_emails),
+			POLICY_ADOPT_ENABLED_USERS: bool(self.adopt_enabled_users),
 		}
 
 	def is_blacklisted(self, user: str) -> bool:
@@ -194,6 +204,17 @@ def blacklisted_user_emails(settings: "AccessHubSettings") -> set[str]:
 	return {email for email in rows if email}
 
 
+def adoptable_user_emails(settings: "AccessHubSettings") -> set[str]:
+	"""Emails whose pre-existing standing account a guard may delete and
+	re-provision rather than refuse (PROTOCOL.md §3 step 7). Resolved Link->email
+	like blacklisted_user_emails: the guard matches the grant's user_email."""
+	names = {row.user for row in settings.adoptable_users if row.user}
+	if not names:
+		return set()
+	rows = frappe.get_all("User", filters={"name": ["in", list(names)]}, pluck="email")
+	return {email for email in rows if email}
+
+
 def disabled_granted_user_emails() -> set[str]:
 	"""Emails ever granted access, minus emails of currently-enabled Users.
 	All in email-space (g.user_email is a snapshot, not a Link) so this stays
@@ -209,6 +230,52 @@ def disabled_granted_user_emails() -> set[str]:
 	# anyway - just fetch every enabled email once.
 	enabled = frappe.get_all("User", filters={"enabled": 1}, pluck="email")
 	return set(granted) - set(enabled)
+
+
+@frappe.whitelist()
+def adoptable_user_candidates() -> list:
+	"""Enabled hub users who can read Remote Site, minus those already listed —
+	what the Adoptable Users fetch button fills that field with.
+
+	Read on Remote Site is exactly `request_access`'s own gate, so these are the
+	people who can reach a client site, and therefore the identities that can
+	collide with a standing account there. Says nothing about whether such an
+	account exists anywhere (the hub cannot read a client's User table) — a
+	shortlist to review, not a detection.
+
+	Roles are resolved live from the doctype's permissions (Custom DocPerm included)
+	rather than hardcoded, so granting a new role read access shows up here too.
+	Blacklisted users are excluded: the hub strips them from the policy's
+	adoptable_emails, so a row for one would do nothing. Requires write permission
+	— the caller is about to populate a Settings field."""
+	from frappe.permissions import get_doctype_roles
+
+	settings = frappe.get_single("Access Hub Settings")
+	settings.check_permission("write")
+
+	excluded = {row.user for row in settings.adoptable_users if row.user}
+	excluded |= {row.user for row in settings.blacklisted_users if row.user}
+	excluded |= set(frappe.STANDARD_USERS)
+
+	# Via Has Role, so a user qualifies through any one of the reading roles.
+	has_role = frappe.qb.DocType("Has Role")
+	user = frappe.qb.DocType("User")
+	return (
+		frappe.qb.from_(user)
+		.join(has_role)
+		.on(has_role.parent == user.name)
+		.select(user.name)
+		.distinct()
+		.where(
+			(user.enabled == 1)
+			& (user.user_type == "System User")
+			& (has_role.parenttype == "User")
+			& has_role.role.isin(get_doctype_roles("Remote Site"))
+			& user.name.notin(list(excluded))
+		)
+		.orderby(user.name)
+		.run(as_dict=True)
+	)
 
 
 @frappe.whitelist()

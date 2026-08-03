@@ -9,6 +9,10 @@
   "access_disabled",
   "access_control_column_break",
   "blacklisted_users",
+  "adoption_section",
+  "adoptable_users",
+  "fetch_adoptable_users",
+  "adopt_enabled_users",
   "policy_section",
   "rules",
   "session_expiry_seconds",
@@ -72,6 +76,31 @@
    "fieldtype": "Table MultiSelect",
    "label": "Blacklisted Users",
    "options": "Blacklisted User"
+  },
+  {
+   "fieldname": "adoption_section",
+   "fieldtype": "Section Break",
+   "label": "Account Adoption"
+  },
+  {
+   "description": "On a site onboarded before access-guard, a standing account for these users is deleted and re-created as ephemeral on first access.",
+   "fieldname": "adoptable_users",
+   "fieldtype": "Table MultiSelect",
+   "label": "Adoptable Users",
+   "options": "Adoptable User"
+  },
+  {
+   "depends_on": "eval:!(doc.adoptable_users || []).length",
+   "fieldname": "fetch_adoptable_users",
+   "fieldtype": "Button",
+   "label": "Fetch Users With Site Access"
+  },
+  {
+   "default": "0",
+   "description": "Also adopt an account that is still enabled on the target site, not just a disabled one.",
+   "fieldname": "adopt_enabled_users",
+   "fieldtype": "Check",
+   "label": "Adopt Enabled Accounts"
   },
   {
    "fieldname": "policy_section",

@@ -19,6 +19,32 @@ frappe.ui.form.on("Access Hub Settings", {
 		frm.set_query("document_type", "rules", doctype_query);
 	},
 
+	// A Button field, so it sits under the table it fills. Hidden once that table
+	// has rows (depends_on): it fills the field wholesale, and re-running it over a
+	// curated list would re-add whatever the operator deliberately removed.
+	fetch_adoptable_users(frm) {
+		frappe.call({
+			method: "access_hub.access_hub.doctype.access_hub_settings.access_hub_settings.adoptable_user_candidates",
+			freeze: true,
+			freeze_message: __("Fetching users..."),
+			callback: (r) => {
+				const users = r.message || [];
+				if (!users.length) {
+					frappe.msgprint(__("No users with access to Remote Site were found."));
+					return;
+				}
+				users.forEach((user) => frm.add_child("adoptable_users", { user: user.name }));
+				frm.refresh_field("adoptable_users");
+				frappe.show_alert({
+					message: __("Added {0} user(s). Remove any that shouldn't be adoptable.", [
+						users.length,
+					]),
+					indicator: "orange",
+				});
+			},
+		});
+	},
+
 	// A Button field, not a toolbar action, so it sits beside the config it acts on
 	// and hides with the section.
 	fc_sync_now(frm) {

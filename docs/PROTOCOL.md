@@ -96,6 +96,18 @@ PASETO `v4.public`, signed with the hub private key. Claims:
    `EphemeralUserCollisionError`, no session started. Ephemeral membership is grant-file-derived
    (`ephemeral_users()` = every `user` named in a grant file), never a DB flag.
 
+   **Adoption** is the one exception. A site onboarded before access-guard already has a standing
+   account for every consultant, so the refusal above would block their first request forever. If
+   `user_email` is in the policy's `adoptable_emails`, the guard **deletes** the standing account
+   (`force=True` — it owns rows site-wide, so its ToDos/assignments/ownership stamps are accepted
+   collateral) and provisions a fresh ephemeral user under the same email via the normal path, so
+   the grant file owns the identity from then on. Delete-and-recreate rather than converting the row
+   in place: one provisioning path, no second notion of "ephemeral enough". Neither `delete_doc` nor
+   `User.on_trash` commits, so this stays inside `accept()`'s transaction and a later failure rolls
+   the deletion back with it. `Administrator`/`Guest` are refused outright. By default only a
+   **disabled** standing account is adoptable; `adopt_enabled_users` extends this to an enabled one
+   (riskier — someone may actively be using it).
+
 On success: write grant file, create/reuse ephemeral user, start session, redirect to
 `get_default_path()` (the configured default app for the logged-in user) or `/app`.
 
@@ -128,7 +140,9 @@ Policy object example:
   "name_suffix": "consultant",
   "access_disabled": false,
   "blacklisted_emails": [],
-  "disallow_simultaneous_sessions": false
+  "disallow_simultaneous_sessions": false,
+  "adoptable_emails": [],
+  "adopt_enabled_users": false
 }
 ```
 
@@ -142,6 +156,12 @@ provisioning and reuse - so a policy change takes effect the next time that user
 accepted, not just at first creation); off uses a large-but-finite cap (100) since Frappe's own
 session-clearing logic (`get_sessions_to_clear`, frappe/sessions.py) treats a falsy
 `simultaneous_sessions` as 1, not "unlimited".
+
+`adoptable_emails` / `adopt_enabled_users` (§3 step 7) are read live on every `accept()`, never
+stamped onto a grant — removing a row stops future adoptions but does not resurrect an account
+already deleted. The hub excludes any blacklisted email from `adoptable_emails`: a denied user's
+grant is reaped on arrival, so deleting their standing account first would be destruction in
+service of a session that never runs.
 
 ## 5. Endpoints
 
