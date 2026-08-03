@@ -163,7 +163,7 @@ class AccessHubSettings(Document):
 			# Minus the blacklist: a denied user's grant is reaped on arrival anyway,
 			# so deleting their standing account first would be destruction in
 			# service of a session that never runs.
-			POLICY_ADOPTABLE_EMAILS: sorted(adoptable_user_emails(self) - policy_blacklisted_emails),
+			POLICY_ADOPTABLE_EMAILS: list(adoptable_user_emails(self) - policy_blacklisted_emails),
 			POLICY_ADOPT_ENABLED_USERS: bool(self.adopt_enabled_users),
 		}
 
