@@ -38,7 +38,7 @@
    "read_only": 1
   },
   {
-   "description": "fetch_from only runs when User itself changes, so this stays put even after the linked User is deleted later — used to keep evicting a removed user even after their User record is gone.",
+   "description": "Survives deletion of the linked User, so eviction still works.",
    "fetch_from": "user.email",
    "fieldname": "user_email",
    "fieldtype": "Data",

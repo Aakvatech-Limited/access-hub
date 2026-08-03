@@ -57,7 +57,7 @@
   },
   {
    "default": "0",
-   "description": "Cap each ephemeral user to one active session at a time. Off by default (Frappe's own multi-session limit applies).",
+   "description": "Cap each ephemeral user to one active session at a time.",
    "fieldname": "disallow_simultaneous_sessions",
    "fieldtype": "Check",
    "label": "Disallow Simultaneous Sessions"
