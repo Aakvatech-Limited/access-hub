@@ -12,6 +12,7 @@
   "adoption_section",
   "adoptable_users",
   "fetch_adoptable_users",
+  "adoption_column_break",
   "adopt_enabled_users",
   "policy_section",
   "rules",
@@ -94,6 +95,10 @@
    "fieldname": "fetch_adoptable_users",
    "fieldtype": "Button",
    "label": "Fetch Users With Site Access"
+  },
+  {
+   "fieldname": "adoption_column_break",
+   "fieldtype": "Column Break"
   },
   {
    "default": "0",
